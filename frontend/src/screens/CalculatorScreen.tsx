@@ -485,12 +485,29 @@ export const CalculatorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
   );
 };
 
+const { width: screenWidth } = Dimensions.get('window');
+const calcWidth = Math.min(screenWidth, 480);
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5FDF9' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, backgroundColor: 'white' },
+  container: { flex: 1, backgroundColor: '#F5FDF9', alignItems: 'center' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 20,
+    backgroundColor: 'white',
+    width: '100%',
+    maxWidth: 480,
+  },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A' },
   backBtn: { padding: 4 },
-  mainTabs: { flexDirection: 'row', padding: 10, backgroundColor: 'white' },
+  mainTabs: {
+    flexDirection: 'row',
+    padding: 10,
+    backgroundColor: 'white',
+    width: '100%',
+    maxWidth: 480,
+  },
   mainTab: { flex: 1, padding: 12, alignItems: 'center', borderRadius: 10, backgroundColor: '#F0F4F2', marginHorizontal: 5 },
   activeMainTab: { backgroundColor: '#27AE60' },
   mainTabText: { fontWeight: '700', color: '#666' },
@@ -510,6 +527,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 5,
+    width: '100%',
+    maxWidth: 480,
   },
   display: {
     height: 100,
@@ -550,8 +569,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   btn: {
-    width: (width - 48) / 4, // Increased size (removed padding calc)
-    height: (width - 48) / 4,
+    width: (calcWidth - 48) / 4, // Use calcWidth
+    height: (calcWidth - 48) / 4,
     borderRadius: 24, // Rounder
     justifyContent: 'center',
     alignItems: 'center',
@@ -615,7 +634,12 @@ const styles = StyleSheet.create({
   },
 
   // Farmer Calc
-  farmerCalc: { flex: 1, padding: 16 },
+  farmerCalc: {
+    flex: 1,
+    padding: 16,
+    width: '100%',
+    maxWidth: 480, // Constrain width
+  },
   farmerTabsContainer: { flexDirection: 'row', marginBottom: 20 },
   farmerTab: { paddingHorizontal: 20, paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: '#E0F2E9', marginRight: 10 },
   activeFarmerTab: { borderBottomColor: '#27AE60' },
