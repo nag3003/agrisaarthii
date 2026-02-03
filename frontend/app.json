@@ -23,11 +23,15 @@
                 "foregroundImage": "./assets/adaptive-icon.png",
                 "backgroundColor": "#ffffff"
             },
-            "package": "com.agrisarathi.app"
+            "package": "agrisarathi03.com",
+            "googleServicesFile": "./google-services.json"
         },
         "web": {
             "favicon": "./assets/favicon.png",
             "bundler": "metro"
+        },
+        "experiments": {
+            "baseUrl": "/agrisaarthii"
         },
         "scheme": "agrisarathi",
         "plugins": []

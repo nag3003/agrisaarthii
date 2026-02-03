@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { LocationService } from '../services/location';
 import { ProfileService } from '../services/profile';
 
 interface MarketItem {
@@ -111,6 +112,17 @@ export const MarketPriceScreen: React.FC<{ navigation: any }> = ({ navigation })
   }, [user]);
 
   const loadUserLocation = async () => {
+    // 1. Try GPS
+    const gps = await LocationService.getCurrentLocation();
+    if (gps) {
+      const address = await LocationService.getReverseGeocode(gps.lat, gps.lon);
+      if (address.district) {
+        setUserLocation({ state: address.state || undefined, district: address.district });
+        return;
+      }
+    }
+
+    // 2. Fallback to Profile
     if (user) {
       const profile = await ProfileService.getProfile(user.uid);
       if (profile) {

@@ -1,7 +1,7 @@
 import { auth, db } from './firebase';
-import { 
-  onAuthStateChanged, 
-  signOut, 
+import {
+  onAuthStateChanged,
+  signOut,
   User,
   GoogleAuthProvider,
   signInWithPopup,
@@ -29,7 +29,7 @@ export function useGoogleAuth() {
   const signInWithGoogle = async () => {
     try {
       const clientId = GOOGLE_CLIENT_ID;
-      
+
       if (!clientId || clientId.includes('YOUR_')) {
         const errorMsg = "Google Configuration Error:\n\n1. Copy your Web Client ID from Google Cloud Console.\n2. Paste it into .env as EXPO_PUBLIC_GOOGLE_CLIENT_ID.\n3. RESTART your terminal.";
         logger.error('Auth', errorMsg);
@@ -71,8 +71,69 @@ export function useGoogleAuth() {
   return { signInWithGoogle, request };
 }
 
+// --- APPLE AUTH ---
+import * as AppleAuthentication from 'expo-apple-authentication';
+
+export function useAppleAuth() {
+  const signInWithApple = async () => {
+    try {
+      logger.info('Auth', 'Initiating Apple Sign-In...');
+
+      if (Platform.OS === 'android') {
+        throw new Error('Apple Sign-In is not supported on Android devices.');
+      }
+
+      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      if (!isAvailable) {
+        throw new Error('Apple Sign-In is not available on this device.');
+      }
+
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      const { identityToken, fullName } = credential;
+      if (!identityToken) {
+        throw new Error('No identity token provided by Apple.');
+      }
+
+      logger.info('Auth', 'Apple Identity Token received');
+
+      const provider = new OAuthProvider('apple.com');
+      provider.addScope('email');
+      provider.addScope('name');
+
+      const firebaseCredential = provider.credential({
+        idToken: identityToken,
+        // Apple only returns name on first login, so we might need to handle it elsewhere or store it
+      });
+
+      const result = await signInWithCredential(auth, firebaseCredential);
+
+      // Store name if it's the first time and Apple provided it
+      if (fullName && result.user) {
+        // We can pass this back or update profile immediately
+        return { user: result.user, fullName };
+      }
+
+      return { user: result.user };
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        throw new Error('Apple login cancelled');
+      }
+      logger.error('Auth', 'Apple Sign-In Error', error);
+      throw error;
+    }
+  };
+
+  return { signInWithApple };
+}
+
 export const AuthService = {
-  onAuthStateChanged: (callback: (user: User | null) => void) => 
+  onAuthStateChanged: (callback: (user: User | null) => void) =>
     onAuthStateChanged(auth, callback),
 
   getCurrentUser: () => auth.currentUser,
@@ -85,16 +146,16 @@ export const AuthService = {
     } catch (error: any) {
       logger.error('Auth', 'Firebase Login Error', { code: error.code, message: error.message });
       let message = 'An error occurred during login';
-      
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') 
+
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential')
         message = 'Invalid email or password. Please check your credentials.';
-      else if (error.code === 'auth/too-many-requests') 
+      else if (error.code === 'auth/too-many-requests')
         message = 'Too many failed attempts. Your account has been temporarily disabled. Please try again later.';
-      else if (error.code === 'auth/network-request-failed') 
+      else if (error.code === 'auth/network-request-failed')
         message = 'Network error. Please check your internet connection.';
-      else if (error.code === 'auth/invalid-api-key') 
+      else if (error.code === 'auth/invalid-api-key')
         message = 'Configuration Error: Invalid Firebase API Key.';
-      else 
+      else
         message = `Login failed: ${error.message}`;
 
       return { error: message, success: false };
@@ -109,7 +170,7 @@ export const AuthService = {
     } catch (error: any) {
       logger.error('Auth', 'Firebase Registration Error', { code: error.code, message: error.message });
       let message = 'An error occurred during registration';
-      
+
       if (error.code === 'auth/email-already-in-use') message = 'This email is already in use. Try logging in instead.';
       else if (error.code === 'auth/invalid-email') message = 'Invalid email address format.';
       else if (error.code === 'auth/weak-password') message = 'Password is too weak. Please use at least 6 characters.';

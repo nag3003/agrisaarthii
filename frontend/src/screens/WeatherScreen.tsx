@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { getWeather } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { LocationService } from '../services/location';
 import { ProfileService } from '../services/profile';
 
 export const WeatherScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
@@ -26,14 +27,19 @@ export const WeatherScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         try {
             let lat = 20.0, lon = 73.8; // Default Nashik
 
-            if (user) {
+            // Try GPS first
+            const gps = await LocationService.getCurrentLocation();
+            if (gps) {
+                lat = gps.lat;
+                lon = gps.lon;
+            } else if (user) {
+                // Fallback to Profile
                 const profile = await ProfileService.getProfile(user.uid);
                 if (profile?.state && profile?.district) {
                     const coords = ProfileService.getCoordinatesForLocation(profile.state, profile.district);
                     lat = coords.lat;
                     lon = coords.lon;
                 } else if (profile?.location) {
-                    // Fallback to old textual location if new fields aren't set
                     // @ts-ignore
                     lat = profile.location.lat || 20.0;
                     // @ts-ignore

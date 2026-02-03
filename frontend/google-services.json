@@ -1,0 +1,39 @@
+{
+    "project_info": {
+        "project_number": "898919712152",
+        "project_id": "agrisarathi-ad792",
+        "storage_bucket": "agrisarathi-ad792.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:898919712152:android:82b08d9593f47ee57ed7ed",
+                "android_client_info": {
+                    "package_name": "agrisarathi03.com"
+                }
+            },
+            "oauth_client": [
+                {
+                    "client_id": "898919712152-468rlvsgd2d9uog4l7e46g8bjcr93brl.apps.googleusercontent.com",
+                    "client_type": 3
+                }
+            ],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyAc1fegjLXMwyLr3Npep-4oSyNu0sa1jnM"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": [
+                        {
+                            "client_id": "898919712152-468rlvsgd2d9uog4l7e46g8bjcr93brl.apps.googleusercontent.com",
+                            "client_type": 3
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}

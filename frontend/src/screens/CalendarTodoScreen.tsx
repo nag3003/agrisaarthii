@@ -114,7 +114,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
   const formatTimeDisplay = (timeStr: string) => {
     if (!timeStr) return '';
     if (is24Hour) return timeStr;
-    
+
     const [hours, minutes] = timeStr.split(':');
     const h = parseInt(hours);
     const ampm = h >= 12 ? 'PM' : 'AM';
@@ -161,7 +161,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
       } catch (error: any) {
         console.error("Error saving todo to Firestore:", error);
         // Fallback to local storage on error
-        const updatedTodos = editingTodoId 
+        const updatedTodos = editingTodoId
           ? todos.map(t => t.id === editingTodoId ? newTodo : t)
           : [...todos, newTodo];
         await saveTodos(updatedTodos);
@@ -169,7 +169,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
       }
     } else {
       // Fallback to local storage for demo users or if not logged in
-      const updatedTodos = editingTodoId 
+      const updatedTodos = editingTodoId
         ? todos.map(t => t.id === editingTodoId ? newTodo : t)
         : [...todos, newTodo];
       await saveTodos(updatedTodos);
@@ -202,7 +202,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     if (!todo) return;
 
     const updatedTodo = { ...todo, completed: !todo.completed };
-    
+
     if (user && !user.uid.startsWith('demo_')) {
       try {
         await setDoc(doc(db, 'users', user.uid, 'todos', id), updatedTodo);
@@ -218,32 +218,56 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
   };
 
   const deleteTodo = async (id: string) => {
-    Alert.alert(
-      "Delete Task",
-      "Are you sure you want to delete this task?",
-      [
-        { text: "Cancel", style: "cancel" },
-        { 
-          text: "Delete", 
-          style: "destructive", 
-          onPress: async () => {
-            if (user && !user.uid.startsWith('demo_')) {
-              try {
-                await deleteDoc(doc(db, 'users', user.uid, 'todos', id));
-              } catch (error) {
-                console.error("Error deleting todo:", error);
+    if (Platform.OS === 'web') {
+      const confirm = window.confirm("Are you sure you want to delete this task?");
+      if (confirm) {
+        if (user && !user.uid.startsWith('demo_')) {
+          try {
+            await deleteDoc(doc(db, 'users', user.uid, 'todos', id));
+          } catch (error) {
+            console.error("Error deleting todo:", error);
+            const updatedTodos = todos.filter(t => t.id !== id);
+            await saveTodos(updatedTodos);
+          }
+        } else {
+          const updatedTodos = todos.filter(t => t.id !== id);
+          await saveTodos(updatedTodos);
+        }
+      }
+    } else {
+      Alert.alert(
+        "Delete Task",
+        "Are you sure you want to delete this task?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              if (user && !user.uid.startsWith('demo_')) {
+                try {
+                  await deleteDoc(doc(db, 'users', user.uid, 'todos', id));
+                } catch (error) {
+                  console.error("Error deleting todo:", error);
+                  const updatedTodos = todos.filter(t => t.id !== id);
+                  await saveTodos(updatedTodos);
+                }
+              } else {
                 const updatedTodos = todos.filter(t => t.id !== id);
                 await saveTodos(updatedTodos);
               }
-            } else {
-              const updatedTodos = todos.filter(t => t.id !== id);
-              await saveTodos(updatedTodos);
             }
-          } 
-        }
-      ]
-    );
+          }
+        ]
+      );
+    }
   };
+
+  // ... (rest of code)
+
+
+  // Start of helper functions and render logic
+
 
   const addTemplateTask = async (text: string, priority: 'low' | 'medium' | 'high' = 'medium') => {
     const newTodo: Todo = {
@@ -274,14 +298,14 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     return acc;
   }, {});
 
-  markedDates[selectedDate] = { 
-    ...markedDates[selectedDate], 
-    selected: true, 
-    selectedColor: '#27AE60' 
+  markedDates[selectedDate] = {
+    ...markedDates[selectedDate],
+    selected: true,
+    selectedColor: '#27AE60'
   };
 
   const getPriorityColor = (p: string) => {
-    switch(p) {
+    switch (p) {
       case 'high': return '#FF6B6B';
       case 'medium': return '#FFA502';
       default: return '#27AE60';
@@ -300,6 +324,8 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.calendarCard}>
           <Calendar
+            current={selectedDate} // Fix: Force calendar to show selected date
+            key={selectedDate} // Fix: Force re-render on date change if needed
             onDayPress={(day: any) => setSelectedDate(day.dateString)}
             markedDates={markedDates}
             theme={{
@@ -308,8 +334,8 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
               selectedDayBackgroundColor: '#27AE60',
             }}
           />
-          <TouchableOpacity 
-            style={styles.todayBtn} 
+          <TouchableOpacity
+            style={styles.todayBtn}
             onPress={() => setSelectedDate(new Date().toISOString().split('T')[0])}
           >
             <Text style={styles.todayBtnText}>Go to Today</Text>
@@ -361,14 +387,14 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
         ) : (
           filteredTodos.map(todo => (
             <View key={todo.id} style={styles.todoItem}>
-              <TouchableOpacity 
-                style={[styles.checkbox, todo.completed && styles.checked]} 
+              <TouchableOpacity
+                style={[styles.checkbox, todo.completed && styles.checked]}
                 onPress={() => toggleTodo(todo.id)}
               >
                 {todo.completed && <Ionicons name="checkmark" size={16} color="white" />}
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.todoTextContainer}
                 onPress={() => startEditTodo(todo)}
               >
@@ -383,7 +409,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
                 {todo.description ? (
                   <Text style={styles.todoDesc} numberOfLines={1}>{todo.description}</Text>
                 ) : null}
-                
+
                 <View style={styles.timeAndAlarmContainer}>
                   {todo.time && (
                     <View style={styles.timeBadge}>
@@ -399,7 +425,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
                   )}
                 </View>
               </TouchableOpacity>
-              
+
               <TouchableOpacity onPress={() => deleteTodo(todo.id)}>
                 <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
               </TouchableOpacity>
@@ -463,7 +489,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
 
             <Text style={styles.label}>Task Time</Text>
             <View style={styles.timeSelectionRow}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.timePickerBtn}
                 onPress={() => setShowTimePicker(true)}
               >
@@ -471,25 +497,25 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
                   {formatTimeDisplay(reminderTime)}
                 </Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.formatToggle}
                 onPress={() => setIs24Hour(!is24Hour)}
               >
                 <Text style={styles.formatToggleText}>{is24Hour ? '24h' : '12h'}</Text>
               </TouchableOpacity>
             </View>
-            
+
             {Platform.OS !== 'web' && (
               <View>
-                <TouchableOpacity 
-                  style={styles.alarmToggle} 
+                <TouchableOpacity
+                  style={styles.alarmToggle}
                   onPress={() => setSetAlarm(!setAlarm)}
                 >
-                  <Ionicons 
-                    name={setAlarm ? "alarm" : "alarm-outline"} 
-                    size={24} 
-                    color={setAlarm ? "#27AE60" : "#666"} 
+                  <Ionicons
+                    name={setAlarm ? "alarm" : "alarm-outline"}
+                    size={24}
+                    color={setAlarm ? "#27AE60" : "#666"}
                   />
                   <Text style={[styles.alarmToggleText, setAlarm && styles.activeAlarmText]}>
                     Set Reminder Alarm
@@ -515,13 +541,13 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
         <View style={styles.modalOverlay}>
           <View style={styles.timePickerContainer}>
             <Text style={[styles.modalTitle, { textAlign: 'center', marginBottom: 20 }]}>Select Time</Text>
-            
+
             <View style={styles.timePickerRows}>
               {/* Hours Column */}
               <View style={styles.pickerColumn}>
                 <Text style={styles.pickerLabel}>Hour</Text>
-                <ScrollView 
-                  style={styles.pickerScroll} 
+                <ScrollView
+                  style={styles.pickerScroll}
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={{ paddingVertical: 80 }}
                 >
@@ -530,14 +556,14 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
                     const currentH = parseInt(reminderTime.split(':')[0]);
                     const currentM = reminderTime.split(':')[1];
                     const isPM = currentH >= 12;
-                    
+
                     // Convert 24h to 12h for display comparison
                     const displayH = currentH % 12 || 12;
                     const isSelected = displayH === parseInt(h);
-                    
+
                     return (
-                      <TouchableOpacity 
-                        key={i} 
+                      <TouchableOpacity
+                        key={i}
                         style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                         onPress={() => {
                           let newH = parseInt(h);
@@ -560,16 +586,16 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
               {/* Minutes Column */}
               <View style={styles.pickerColumn}>
                 <Text style={styles.pickerLabel}>Minute</Text>
-                <ScrollView 
-                  style={styles.pickerScroll} 
+                <ScrollView
+                  style={styles.pickerScroll}
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={{ paddingVertical: 80 }}
                 >
                   {['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map((m) => {
                     const isSelected = reminderTime.endsWith(m);
                     return (
-                      <TouchableOpacity 
-                        key={m} 
+                      <TouchableOpacity
+                        key={m}
                         style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                         onPress={() => setReminderTime(`${reminderTime.split(':')[0]}:${m}`)}
                       >
@@ -590,9 +616,9 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
                     const currentH = parseInt(reminderTime.split(':')[0]);
                     const isPM = currentH >= 12;
                     const isSelected = (period === 'PM' && isPM) || (period === 'AM' && !isPM);
-                    
+
                     return (
-                      <TouchableOpacity 
+                      <TouchableOpacity
                         key={period}
                         style={[styles.pickerItem, isSelected && styles.pickerItemSelected]}
                         onPress={() => {
@@ -612,8 +638,8 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
               </View>
             </View>
 
-            <TouchableOpacity 
-              style={[styles.modalBtn, styles.saveBtn, { marginTop: 20 }]} 
+            <TouchableOpacity
+              style={[styles.modalBtn, styles.saveBtn, { marginTop: 20 }]}
               onPress={() => setShowTimePicker(false)}
             >
               <Text style={styles.saveBtnText}>Done</Text>
@@ -663,9 +689,9 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   todayBtn: {
-    alignSelf: 'center', 
+    alignSelf: 'center',
     paddingVertical: 8,
-    paddingHorizontal: 16, 
+    paddingHorizontal: 16,
     borderRadius: 20,
     backgroundColor: '#E0F2E9',
     marginTop: 8,
@@ -676,9 +702,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   tasksHeader: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
   summaryText: {
@@ -688,13 +714,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700', 
+    fontWeight: '700',
     color: '#1A1A1A',
   },
   addBtn: {
     backgroundColor: '#27AE60',
     width: 36,
-    height: 36, 
+    height: 36,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
@@ -728,25 +754,25 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   todoItem: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: 'white', 
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
-    shadowRadius: 5, 
+    shadowRadius: 5,
     elevation: 2,
   },
   checkbox: {
-    width: 24,    height: 24,
-    borderRadius: 12, 
+    width: 24, height: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: '#27AE60',
-    justifyContent: 'center', 
-    alignItems: 'center', 
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   checked: {
@@ -756,9 +782,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   todoHeaderRow: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 2,
   },
   todoText: {
@@ -786,11 +812,11 @@ const styles = StyleSheet.create({
   },
   completedText: {
     textDecorationLine: 'line-through',
-    color: '#AAA', 
+    color: '#AAA',
   },
   alarmBadge: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   timeAndAlarmContainer: {
     flexDirection: 'row',
@@ -819,8 +845,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   emptyState: {
-    alignItems: 'center', 
-    justifyContent: 'center', 
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 60,
   },
   emptyText: {
@@ -831,23 +857,23 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', 
-    padding: 20, 
+    justifyContent: 'center',
+    padding: 20,
   },
   modalContent: {
-    backgroundColor: 'white', 
-    borderRadius: 20, 
+    backgroundColor: 'white',
+    borderRadius: 20,
     padding: 24,
   },
   modalHeader: {
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 20, 
-    fontWeight: '700', 
+    fontSize: 20,
+    fontWeight: '700',
     color: '#1A1A1A',
   },
   modalInput: {
@@ -858,8 +884,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   textArea: {
-    height: 80, 
-    textAlignVertical: 'top', 
+    height: 80,
+    textAlignVertical: 'top',
   },
   label: {
     fontSize: 14,
@@ -868,30 +894,30 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   prioritySelector: {
-    flexDirection: 'row', 
+    flexDirection: 'row',
     marginBottom: 20,
   },
   priorityOption: {
     flex: 1,
     paddingVertical: 8,
-    alignItems: 'center', 
+    alignItems: 'center',
     borderRadius: 8,
     backgroundColor: '#F5F5F5',
     marginRight: 8,
   },
   priorityOptionText: {
     fontSize: 12,
-    fontWeight: '700', 
+    fontWeight: '700',
     color: '#666',
   },
   alarmToggle: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
   },
   alarmToggleText: {
     marginLeft: 10,
-    fontSize: 16, 
+    fontSize: 16,
     color: '#666',
   },
   activeAlarmText: {
@@ -899,8 +925,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   timeSelectionRow: {
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 24,
     backgroundColor: '#F5F5F5',
     borderRadius: 12,
@@ -909,26 +935,26 @@ const styles = StyleSheet.create({
   timePickerBtn: {
     flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 12, 
+    paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: 'white', 
-    alignItems: 'center', 
+    backgroundColor: 'white',
+    alignItems: 'center',
   },
   timePickerText: {
-    fontSize: 16, 
-    fontWeight: '600', 
+    fontSize: 16,
+    fontWeight: '600',
     color: '#27AE60',
   },
   formatToggle: {
     marginLeft: 8,
     paddingVertical: 8,
-    paddingHorizontal: 12, 
+    paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: '#E0F2E9',
   },
   formatToggleText: {
     fontSize: 14,
-    fontWeight: '700', 
+    fontWeight: '700',
     color: '#27AE60',
   },
   timePickerContainer: {

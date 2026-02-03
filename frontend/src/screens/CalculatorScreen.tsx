@@ -547,63 +547,71 @@ const styles = StyleSheet.create({
   },
   buttonGrid: {
     flex: 1,
+    marginTop: 10,
   },
   btn: {
-    width: (width - 64) / 4,
-    height: (width - 64) / 4,
-    borderRadius: 20,
+    width: (width - 48) / 4, // Increased size (removed padding calc)
+    height: (width - 48) / 4,
+    borderRadius: 24, // Rounder
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginBottom: 12, // Spacing between rows
   },
   numBtn: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#F1F3F5',
-    elevation: 2,
+    borderColor: '#EDEFEF',
+    elevation: 4,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5
   },
   numBtnText: {
-    fontSize: 28,
+    fontSize: 40, // Increased from 32
     color: '#2C3E50',
-    fontWeight: '500'
+    fontWeight: '600'
   },
   opBtn: {
     backgroundColor: '#E7F5FF',
+    elevation: 4,
+    shadowColor: '#228BE6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   opBtnText: {
-    fontSize: 32,
+    fontSize: 44, // Increased from 36
     color: '#228BE6',
-    fontWeight: '400'
+    fontWeight: '500'
   },
   specialBtn: {
     backgroundColor: '#F3F0FF',
+    elevation: 4,
   },
   specialBtnText: {
-    fontSize: 22,
+    fontSize: 30, // Increased from 24
     color: '#7950F2',
-    fontWeight: '600'
+    fontWeight: '700'
   },
   equalBtn: {
     backgroundColor: '#27AE60',
-    elevation: 4,
+    elevation: 6,
     shadowColor: '#27AE60',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 10,
   },
   equalBtnText: {
-    fontSize: 32,
+    fontSize: 48, // Increased from 38
     color: 'white',
-    fontWeight: '300'
+    fontWeight: '400'
   },
   row: {
     flexDirection: 'row',
     width: '100%',
     justifyContent: 'space-between',
-    marginBottom: 16
+    marginBottom: 0 // Handled by btn marginBottom
   },
 
   // Farmer Calc

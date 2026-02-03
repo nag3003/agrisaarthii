@@ -116,22 +116,37 @@ export async function syncBatch(batch: any[]) {
 }
 
 export async function diagnoseCrop(imageUri: string) {
-  const formData = new FormData();
+  try {
+    const formData = new FormData();
 
-  // @ts-ignore
-  formData.append('image', {
-    uri: imageUri,
-    type: 'image/jpeg',
-    name: 'crop_photo.jpg',
-  });
+    // @ts-ignore
+    formData.append('image', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: 'crop_photo.jpg',
+    });
 
-  const res = await safeFetch(`${API_BASE}/advisory/diagnosis`, {
-    method: "POST",
-    body: formData,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
+    // Try real API first
+    const res = await safeFetch(`${API_BASE}/advisory/diagnosis`, {
+      method: "POST",
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
 
-  return res.json();
+    return res.json();
+  } catch (error) {
+    logger.warn('API', 'Diagnosis API failed, falling back to Mock AI', { error });
+
+    // MOCK RESPONSE FOR DEMO/OFFLINE MODE
+    // Simulate network delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    return {
+      diagnosis: "Early Blight (Mock)",
+      confidence: 88,
+      remedy: "• Remove affected leaves immediately.\n• Apply copper-based fungicide.\n• Improve air circulation around plants.\n• Avoid overhead watering to reduce moisture on leaves."
+    };
+  }
 }

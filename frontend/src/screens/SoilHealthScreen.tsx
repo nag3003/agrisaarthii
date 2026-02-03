@@ -142,7 +142,7 @@ export const SoilHealthScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                     <View style={styles.recCard}>
                         <Ionicons name="water" size={24} color="#3498DB" />
                         <View style={{ marginLeft: 12, flex: 1 }}>
-                            <Text style={styles.recText}>{data?.savings_estimate !== "N/A" ? data.savings_estimate : "Soil moisture is good."}</Text>
+                            <Text style={styles.recText}>{data?.savings_estimate && data.savings_estimate !== "N/A" ? data.savings_estimate : "Soil moisture is good."}</Text>
                         </View>
                     </View>
                 </View>

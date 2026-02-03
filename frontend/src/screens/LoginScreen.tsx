@@ -15,7 +15,8 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { AuthService, useGoogleAuth } from '../services/auth';
+// Add hook import
+import { AuthService, useGoogleAuth, useAppleAuth } from '../services/auth';
 import { ProfileService, UserProfile } from '../services/profile';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -32,8 +33,76 @@ export const LoginScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const { signInWithGoogle } = useGoogleAuth();
+  const { signInWithApple } = useAppleAuth(); // New Hook
 
-  // Fields
+  // ... (existing code) ...
+
+  const handleAppleSignIn = async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Not Supported', 'Apple Sign-In on Web requires extra configuration. Please use Email or Google.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      showToast('Connecting to Apple...', 'info');
+      const { user, fullName } = await signInWithApple();
+
+      if (user) {
+        showToast('Syncing your profile...', 'info');
+        try {
+          await ProfileService.updateLoginMetadata(user.uid);
+          let profile = await ProfileService.getProfile(user.uid);
+
+          if (!profile) {
+            // Constuct name from Apple provided name if available
+            let displayName = 'Apple User';
+            if (fullName) {
+              displayName = [fullName.givenName, fullName.familyName].filter(Boolean).join(' ') || 'Apple User';
+            }
+
+            profile = {
+              uid: user.uid,
+              name: displayName,
+              email: user.email || '',
+              role: 'farmer',
+              language: 'en',
+              location: 'Unknown',
+              photoURL: null,
+              createdAt: new Date().toISOString(),
+            };
+            await ProfileService.saveProfile(profile);
+          }
+
+          const userRole = profile?.role || 'farmer';
+          await Storage.saveUser({
+            uid: user.uid,
+            email: user.email || '',
+            role: userRole
+          });
+
+          showToast(`Welcome, ${profile.name}!`, 'success');
+          await refreshSession();
+        } catch (syncErr: any) {
+          await Storage.saveUser({
+            uid: user.uid,
+            email: user.email || '',
+            role: 'farmer'
+          });
+          showToast('Signed in successfully', 'success');
+          await refreshSession();
+        }
+      }
+    } catch (error: any) {
+      console.error("Apple Sign-In Error:", error);
+      if (error.message !== "Apple login cancelled") {
+        Alert.alert('Apple Sign-In Error', error.message || 'An unexpected error occurred.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -317,9 +386,7 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  const handleAppleSignIn = () => {
-    Alert.alert('Coming Soon', 'Apple Sign-In will be available soon.');
-  };
+
 
   return (
     <View style={styles.container}>
