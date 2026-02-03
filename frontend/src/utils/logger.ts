@@ -174,7 +174,9 @@ class Logger {
                          errorMessage.includes('net::ERR_ABORTED') ||
                          errorMessage.includes('Failed to fetch'); // Often aborted in dev
 
-          const isDevServerNoise = url.includes('localhost:8081') || url.includes('127.0.0.1:8081');
+          const isDevServerNoise = url.includes('localhost:8081') || 
+                                 url.includes('127.0.0.1:8081') ||
+                                 url.includes('exp.direct');
 
           if (isNoisyDomain || (isAbort && isDevServerNoise)) {
             // Silently log noisy domains or dev server aborts as debug only

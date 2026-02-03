@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore/lite';
 import { getAnalytics, isSupported } from 'firebase/analytics';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -18,37 +19,48 @@ const missingKeys = Object.entries(firebaseConfig)
   .filter(([key, value]) => !value || value.includes('YOUR_'))
   .map(([key]) => key);
 
+let app;
+let auth;
+let db;
+let storage;
+let analytics;
+
 if (missingKeys.length > 0) {
-  const errorMsg = `❌ Firebase Configuration Error:
-The following keys are missing or use placeholders in your .env file:
-${missingKeys.join('\n')}
+  console.error("Firebase Config Error: Missing keys", missingKeys);
+  // Create dummy objects to prevent crash on import
+  // This allows the UI to render and potentially show a proper error message
+  app = { name: 'mock-app', options: {} } as any;
+  auth = { currentUser: null, signOut: async () => { } } as any;
+  db = {} as any;
+  storage = {} as any;
+  analytics = null;
+} else {
+  try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
 
-Please update your .env file with actual values from the Firebase Console and restart the server.`;
+    // Lazy load storage
+    storage = getStorage(app);
 
-  console.error(errorMsg);
-  if (typeof window !== 'undefined') {
-    console.log("%c" + errorMsg, "color: white; background: red; font-size: 16px; font-weight: bold; padding: 10px;");
+
+    // Analytics
+    if (typeof window !== 'undefined') {
+      isSupported().then(yes => {
+        if (yes) {
+          analytics = getAnalytics(app);
+        }
+      });
+    }
+  } catch (e) {
+    console.error("Firebase Init Error:", e);
+    // Fallback mocks
+    app = { name: 'mock-error-app', options: {} } as any;
+    auth = { currentUser: null, signOut: async () => { } } as any;
+    db = {} as any;
+    storage = {} as any;
   }
 }
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-
-// Use Firestore Lite to prevent ERR_ABORTED streaming issues in sandbox environments
-export const db = getFirestore(app);
-
-import { getStorage } from 'firebase/storage';
-export const storage = getStorage(app);
-
-// Analytics can sometimes trigger background network requests that might fail
-let analyticsInstance = null;
-if (typeof window !== 'undefined') {
-  isSupported().then(yes => {
-    if (yes) {
-      analyticsInstance = getAnalytics(app);
-    }
-  });
-}
-export const analytics = analyticsInstance;
-
+export { auth, db, storage, analytics };
 export default app;

@@ -8,8 +8,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { logger } from './src/utils/logger';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
-// Initialize global error handling
-logger.initGlobalErrorHandling();
+// Initialize global error handling - DISABLED FOR DEBUGGING
+// logger.initGlobalErrorHandling();
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ToastProvider } from './src/components/Toast';
@@ -65,6 +65,7 @@ const AppStack = ({ role }: { role: string }) => (
 
 function Main() {
   const { user, role, loading } = useAuth();
+  // FORCE ONLINE TRUE for Web Debugging
   const [isOnline, setIsOnline] = useState(true);
 
   useEffect(() => {
@@ -83,13 +84,15 @@ function Main() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', backgroundColor: '#F5FDF9' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FDF9' }}>
+        <Text style={{ marginTop: 20 }}>Loading AgriSaarthi...</Text>
         <ActivityIndicator size="large" color="#27AE60" />
       </View>
     );
   }
 
-  if (!isOnline) {
+  // Debug View if forced offline
+  if (!isOnline && Platform.OS !== 'web') {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FDF9', padding: 20 }}>
         <Text style={{ fontSize: 40, marginBottom: 20 }}>📡</Text>
@@ -102,7 +105,7 @@ function Main() {
   }
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ flex: 1 }}>
       <NavigationContainer
         ref={navigationRef}
         linking={{
@@ -126,6 +129,7 @@ function Main() {
             },
           },
         }}
+        fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
       >
         <StatusBar style="light" />
         {user ? (
@@ -141,11 +145,13 @@ function Main() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <ToastProvider>
-          <Main />
-        </ToastProvider>
-      </AuthProvider>
+      <View style={{ flex: 1 }}>
+        <AuthProvider>
+          <ToastProvider>
+            <Main />
+          </ToastProvider>
+        </AuthProvider>
+      </View>
     </ErrorBoundary>
   );
 }

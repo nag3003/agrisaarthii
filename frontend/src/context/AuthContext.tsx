@@ -16,8 +16,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   loading: true,
-  refreshSession: async () => {},
-  logout: async () => {},
+  refreshSession: async () => { },
+  logout: async () => { },
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -44,7 +44,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshSession = async () => {
     const storedUser = await Storage.getUser();
-    
+
     if (user || storedUser) {
       const activeUser = user || storedUser;
       try {
@@ -89,8 +89,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     };
-    
+
     checkPersistedUser();
+
+    // Check if auth is a mock (fallback from firebase.ts error)
+    // @ts-ignore
+    if (auth.name === 'mock-app' || auth.name === 'mock-error-app') {
+      console.warn("AuthContext: Running in safe mode with mock auth.");
+      setLoading(false);
+      return;
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
@@ -125,11 +133,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await Storage.clearUser();
         }
       }
-      
+
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Safety timeout: If firebase takes too long or fails silently, stop loading
+    const timer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn("AuthContext: Auth check timed out, forcing loading false");
+          return false;
+        }
+        return prev;
+      });
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   return (
