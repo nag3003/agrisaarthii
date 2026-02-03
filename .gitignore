@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+backend/venv/
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Env
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Build
+frontend/dist/
+frontend/web-build/
+frontend/.expo/

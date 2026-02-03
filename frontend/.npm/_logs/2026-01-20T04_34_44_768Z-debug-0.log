@@ -1,0 +1,11 @@
+0 verbose cli /usr/local/bin/node /usr/local/lib/node_modules/npm/bin/npm-cli.js
+1 info using npm@10.9.3
+2 info using node@v22.20.0
+3 silly config load:file:/usr/local/lib/node_modules/npm/npmrc
+4 silly config load:file:/Users/nag/Desktop/agrisarathi trae/frontend/.npmrc
+5 silly config load:file:/usr/local/etc/npmrc
+6 verbose title npm exec expo start --web
+7 verbose argv "exec" "--" "expo" "start" "--web"
+8 verbose logfile logs-max:10 dir:/Users/nag/Desktop/agrisarathi trae/frontend/.npm/_logs/2026-01-20T04_34_44_768Z-
+9 verbose logfile /Users/nag/Desktop/agrisarathi trae/frontend/.npm/_logs/2026-01-20T04_34_44_768Z-debug-0.log
+10 silly logfile done cleaning log files

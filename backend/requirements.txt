@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+openai==0.28.1
+python-multipart
+python-dotenv
+httpx
+langchain
+langchain-community
+sentence-transformers
+qdrant-client
+librosa
+soundfile
+numpy
+firebase-admin
