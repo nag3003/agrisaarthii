@@ -125,49 +125,6 @@ function Main() {
               CropDoctor: 'crop-doctor',
             },
           },
-          getInitialURL: async () => {
-            // First, check if there is an initial URL with a hash
-            const url = await Linking.getInitialURL();
-
-            if (Platform.OS === 'web' && typeof window !== 'undefined') {
-              const hash = window.location.hash;
-              if (hash) {
-                // Handle hash routing for GitHub Pages
-                // Convert /#/path/to/screen to a valid URL for React Navigation
-                const path = hash.replace(/^#/, '');
-                // We need to return the full URL including the prefix if possible, 
-                // or just the path if our prefix logic allows it. 
-                // Using the exact current location with hash replaced is often safest.
-                return window.location.href.replace(window.location.hash, '') + path;
-              }
-            }
-            return url;
-          },
-          subscribe(listener) {
-            const onReceiveURL = ({ url }: { url: string }) => listener(url);
-
-            // Listen to incoming links from deep linking
-            const subscription = Linking.addEventListener('url', onReceiveURL);
-
-            // Listen to hash changes on web
-            if (Platform.OS === 'web' && typeof window !== 'undefined') {
-              const onHashChange = () => {
-                const hash = window.location.hash;
-                const path = hash.replace(/^#/, '');
-                const url = window.location.href.replace(window.location.hash, '') + path;
-                listener(url);
-              };
-              window.addEventListener('hashchange', onHashChange);
-              return () => {
-                subscription.remove();
-                window.removeEventListener('hashchange', onHashChange);
-              };
-            }
-
-            return () => {
-              subscription.remove();
-            };
-          },
         }}
       >
         <StatusBar style="light" />
