@@ -2,7 +2,7 @@
   "name": "agrisarathi-frontend",
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
-  "homepage": "https://your-username.github.io/agrisarathi-frontend",
+  "homepage": "https://nag3003.github.io/agrisaarthii",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
