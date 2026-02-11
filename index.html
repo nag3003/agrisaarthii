@@ -31,7 +31,37 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <!-- The root element for your Expo app. -->
-    <div id="root" style="display:flex;justify-content:center;align-items:center;height:100%;font-size:24px;font-family:system-ui;">Loading AgriSaarthi...</div>
-  <script src="./_expo/static/js/web/AppEntry-407718bd22fe8d9002720ddf3966d888.js" defer></script>
+    <div id="root" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-size:18px;font-family:system-ui;">
+  <div style="font-size:40px;margin-bottom:20px;">🚜</div>
+  <div>Loading AgriSaarthi... (v2)</div>
+  <div style="font-size:12px;color:#666;margin-top:10px;">Initializing...</div>
+</div>
+  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-b3d6e04539facc620770ad9fd12d0f86.js" defer></script>
+
+<script>
+  window.addEventListener('error', function(e) {
+    const root = document.getElementById('root');
+    if (!root) return;
+    
+    // Check if it's a script loading error
+    if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+      root.innerHTML = '<div style="padding:20px;color:red;font-family:monospace"><h3>Asset Load Error</h3><p>Failed to load: ' + (e.target.src || e.target.href) + '</p><p>BaseURI: ' + document.baseURI + '</p></div>';
+      return;
+    }
+    
+    // Runtime Error
+    if (e.message) {
+      root.innerHTML += '<div style="padding:20px;color:red;font-family:monospace;border-top:1px solid #ccc"><h3>Runtime Error</h3><p>' + e.message + '</p></div>';
+    }
+  }, true);
+  
+  // Unhandled Promise Rejection
+  window.addEventListener('unhandledrejection', function(e) {
+     const root = document.getElementById('root');
+     if (root) {
+       root.innerHTML += '<div style="padding:20px;color:orange;font-family:monospace;border-top:1px solid #ccc"><h3>Promise Rejection</h3><p>' + e.reason + '</p></div>';
+     }
+  });
+</script>
 </body>
 </html>
