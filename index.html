@@ -23,7 +23,23 @@
         flex: 1;
       }
     </style>
-  </head>
+  
+<style>
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    display: flex; /* Critical for flex: 1 to work */
+    flex-direction: column;
+  }
+  /* Ensure no scrollbars on body, let RN handle scrolling */
+  body {
+    overflow: hidden;
+    background-color: #F5FDF9; /* Match app background to avoid white flashes */
+  }
+</style>
+</head>
 
   <body>
     <!-- Use static rendering with Expo Router to support running without JavaScript. -->
