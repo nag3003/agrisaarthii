@@ -53,8 +53,22 @@ AgriSarathi is an intelligent agricultural platform designed to empower farmers 
 
 ## Deployment
 
-The frontend can be deployed to GitHub Pages or Vercel.
+The frontend is configured to deploy to GitHub Pages.
+
+### Enabling GitHub Pages (One-Time Setup)
+
+If you see a 404 error after deployment, you need to enable GitHub Pages in your repository settings:
+
+1.  Go to your repository on GitHub: [https://github.com/nag3003/agrisaarthii](https://github.com/nag3003/agrisaarthii)
+2.  Click on **Settings** (top right tab).
+3.  In the left sidebar, scroll down and click on **Pages**.
+4.  Under **Build and deployment** > **Source**, ensure **Deploy from a branch** is selected.
+5.  Under **Branch**, select **gh-pages** from the dropdown menu and ensure the folder is **/(root)**.
+6.  Click **Save**.
+7.  Wait 1-2 minutes, then refresh [https://nag3003.github.io/agrisaarthii](https://nag3003.github.io/agrisaarthii).
+
 The backend requires a Python environment (e.g., Render, Railway, or AWS).
+For local development, use the provided Serveo tunnels.
 
 ## License
 
