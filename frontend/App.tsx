@@ -120,11 +120,13 @@ function Main() {
         ref={navigationRef}
         linking={{
           prefixes: [
+            // Ensure both the full URL and the local expo link are handled
             'https://nag3003.github.io/agrisaarthii',
             Linking.createURL('/'),
           ],
           config: {
             screens: {
+              // Ensure paths do NOT start with slash to append correctly to prefix
               Onboarding: 'onboarding',
               Login: 'login',
               Home: 'home',
