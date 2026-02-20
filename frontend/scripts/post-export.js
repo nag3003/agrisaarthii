@@ -78,5 +78,14 @@ const styleFix = `
 `;
 html = html.replace('</head>', styleFix + '</head>');
 
+// 5. Inject Base Tag for GitHub Pages Subdirectory
+// This ensures that relative links and history pushState work correctly within the subdirectory
+if (html.includes('<head>')) {
+  html = html.replace('<head>', '<head><base href="/agrisaarthii/" />');
+} else {
+  // Fallback if no head tag (unlikely)
+  html = html.replace('<!DOCTYPE html>', '<!DOCTYPE html><base href="/agrisaarthii/" />');
+}
+
 fs.writeFileSync(indexPath, html);
 console.log('Post-export processing complete: Injected error handler and loading UI.');

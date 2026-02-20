@@ -120,8 +120,8 @@ function Main() {
         ref={navigationRef}
         linking={{
           prefixes: [
-            Linking.createURL('/'),
             'https://nag3003.github.io/agrisaarthii',
+            Linking.createURL('/'),
           ],
           config: {
             screens: {
