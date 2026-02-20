@@ -117,11 +117,11 @@ export class LiveVoiceSession {
           this.onNavigate('MarketPrice');
           await this.speak("Opening Market Prices");
           handled = true;
-      } else if (lower.includes('weather') || lower.includes('forecast')) {
+      } else if (lower.includes('weather') || lower.includes('forecast') || lower.includes('rain')) {
           this.onNavigate('Weather');
-          await this.speak("Here is the weather forecast");
+          await this.speak("Checking the Weather");
           handled = true;
-      } else if (lower.includes('crop doctor') || lower.includes('disease')) {
+      } else if (lower.includes('crop doctor') || lower.includes('disease') || lower.includes('diagnosis')) {
           this.onNavigate('CropDoctor');
           await this.speak("Opening Crop Doctor");
           handled = true;
@@ -129,11 +129,11 @@ export class LiveVoiceSession {
           this.onNavigate('SoilHealth');
           await this.speak("Opening Soil Health");
           handled = true;
-      } else if (lower.includes('calculator')) {
+      } else if (lower.includes('calculator') || lower.includes('calculate')) {
           this.onNavigate('Calculator');
           await this.speak("Opening Calculator");
           handled = true;
-      } else if (lower.includes('scheme') || lower.includes('government')) {
+      } else if (lower.includes('scheme') || lower.includes('government') || lower.includes('subsidy')) {
           this.onNavigate('GovSchemes');
           await this.speak("Opening Government Schemes");
           handled = true;
@@ -141,29 +141,41 @@ export class LiveVoiceSession {
           this.onNavigate('Machinery');
           await this.speak("Opening Machinery");
           handled = true;
-      } else if (lower.includes('task') || lower.includes('todo') || lower.includes('calendar')) {
+      } else if (lower.includes('task') || lower.includes('todo') || lower.includes('calendar') || lower.includes('schedule')) {
           this.onNavigate('CalendarTodo');
           await this.speak("Opening Calendar and Tasks");
           handled = true;
-      } else if (lower.includes('job') || lower.includes('work')) {
+      } else if (lower.includes('job') || lower.includes('work') || lower.includes('employment')) {
           this.onNavigate('AgriJobs');
           await this.speak("Opening Agri Jobs");
           handled = true;
-      } else if (lower.includes('video') || lower.includes('learn')) {
-          this.onNavigate('Videos'); // Note: AppView doesn't have Videos explicitly, maybe pass string?
-          // Check AppView enum in types.ts -> it doesn't have Videos. But HomeScreen had navigation to 'Videos'.
-          // Let's assume 'Videos' is valid screen name but not in AppView enum (or I missed it).
-          // Actually, AppView enum didn't show Videos. 
-          // Let's stick to known views.
-          await this.speak("Opening Videos");
+      } else if (lower.includes('video') || lower.includes('learn') || lower.includes('watch') || lower.includes('tutorial')) {
+          this.onNavigate('Videos'); 
+          await this.speak("Opening Learning Videos");
           handled = true;
-      } else if (lower.includes('profile') || lower.includes('setting')) {
+      } else if (lower.includes('profile') || lower.includes('setting') || lower.includes('account')) {
           this.onNavigate('Profile');
           await this.speak("Opening Profile");
           handled = true;
-      } else if (lower.includes('home')) {
+      } else if (lower.includes('home') || lower.includes('dashboard') || lower.includes('main')) {
           this.onNavigate('Home');
-          await this.speak("Going Home");
+          await this.speak("Going to Home Dashboard");
+          handled = true;
+      } else if (lower.includes('worker') || lower.includes('labour')) {
+          this.onNavigate('WorkerHome');
+          await this.speak("Switching to Worker View");
+          handled = true;
+      } else if (lower.includes('landowner') || lower.includes('owner')) {
+          this.onNavigate('LandownerHome');
+          await this.speak("Switching to Landowner View");
+          handled = true;
+      } else if (lower.includes('login') || lower.includes('sign in') || lower.includes('logout')) {
+          this.onNavigate('Login');
+          await this.speak("Going to Login Screen");
+          handled = true;
+      } else if (lower.includes('onboard') || lower.includes('start')) {
+          this.onNavigate('Onboarding');
+          await this.speak("Restarting Onboarding");
           handled = true;
       }
 

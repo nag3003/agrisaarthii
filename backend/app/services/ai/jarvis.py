@@ -175,5 +175,5 @@ class JarvisEngine:
         if "hello" in prompt_lower or "hi" in prompt_lower:
             return "Hello! How can I help you with your farming today?"
 
-        # Enhanced Fallback Message
-        return "I'm experiencing some connection issues with my main brain, but I'm still here. You can ask me about weather, market prices, or crop advice, and I'll do my best to help using my local knowledge."
+        # Enhanced Fallback Message - seamless experience even without AI key
+        return "I am ready to help! You can ask me to open any feature like 'Show Market Prices', 'Open Calculator', 'Check Weather', or 'Go to Videos'. I can also help with crop advice using my local database."
