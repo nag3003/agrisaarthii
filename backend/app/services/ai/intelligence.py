@@ -16,7 +16,7 @@ class PromptBuilder:
     @staticmethod
     def construct(query: str, context: dict) -> str:
         return f"""
-        You are AgriSaarthi, a helpful agricultural expert for Indian farmers.
+        You are Agri, a helpful agricultural expert for Indian farmers.
         Context:
         - Crop: {context['crop']}
         - Location: {context['location']}
@@ -45,31 +45,42 @@ class AdvisoryReasoning:
         except Exception as e:
             return "Reasoning engine error."
 
-        return not any(word in response.lower() for word in harmful_keywords)
-
 class ImageAnalysis:
     @staticmethod
-    async def analyze_crop_disease(image_path: str) -> dict:
+    async def analyze_crop_disease(image_path: str = None, image_url: str = None, description: str = None) -> dict:
         """
         Analyzes a crop image to detect diseases.
-        In a real scenario, this would encode the image to base64 or upload it
-        and send the URL/Base64 to GPT-4o Vision.
         """
         try:
-            # Mock implementation for MVP / offline demo capabilities
-            # Real implementation would look like:
-            # 1. Encode image to base64
-            # 2. Call OpenAI ChatCompletion with model="gpt-4o" and image_url payload
-            
-            # For now, we simulate a successful response to enable the UI flow
-            # This can be replaced with actual API call when keys are active
-            
-            import random
-            import time
-            
             # Simulate processing time
-            time.sleep(2)
+            import asyncio
+            await asyncio.sleep(2)
             
+            # For MVP, we provide a deterministic mock based on the description if present
+            # If a description is provided, it helps guide the "AI" to a specific diagnosis
+            if description:
+                lower_desc = description.lower()
+                if "yellow" in lower_desc:
+                    return {
+                        "diagnosis": "Nitrogen Deficiency",
+                        "confidence": 94,
+                        "remedy": "Apply Urea or nitrogen-rich fertilizer. Check soil moisture levels. Ensure proper sunlight exposure."
+                    }
+                if "spot" in lower_desc or "brown" in lower_desc:
+                    return {
+                        "diagnosis": "Early Blight",
+                        "confidence": 89,
+                        "remedy": "Remove infected leaves. Apply copper-based fungicide. Improve air circulation between plants."
+                    }
+                if "white" in lower_desc or "powder" in lower_desc:
+                    return {
+                        "diagnosis": "Powdery Mildew",
+                        "confidence": 91,
+                        "remedy": "Spray neem oil or sulphur-based organic fungicides. Avoid watering from above."
+                    }
+            
+            # Default mock responses
+            import random
             diseases = [
                 {
                     "diagnosis": "Leaf Blight",

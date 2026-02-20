@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from app.services.profile_service import ProfileManager
 
 router = APIRouter()
@@ -10,10 +10,13 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    location: Optional[Dict[str, Any]] = None
+    location: Optional[Union[Dict[str, Any], str]] = None
     primary_crops: Optional[List[str]] = None
+    primaryCrop: Optional[str] = None # Frontend mapping
     land_size: Optional[float] = None
+    landSize: Optional[float] = None # Frontend mapping
     soil_type: Optional[str] = None
+    soilType: Optional[str] = None # Frontend mapping
     irrigationType: Optional[str] = None
     water_access: Optional[str] = None # Mapping backend definition
     risk_tolerance: Optional[str] = None
@@ -35,7 +38,16 @@ async def update_profile(profile: ProfileUpdate):
     # Convert Pydantic model to dictionary, excluding None values
     profile_data = profile.dict(exclude_none=True)
     
-    # Handle field mapping
+    # Handle field mapping for backend consistency
+    if 'primary_crops' not in profile_data and 'primaryCrop' in profile_data:
+        profile_data['primary_crops'] = [profile_data['primaryCrop']]
+        
+    if 'land_size' not in profile_data and 'landSize' in profile_data:
+        profile_data['land_size'] = profile_data['landSize']
+        
+    if 'soil_type' not in profile_data and 'soilType' in profile_data:
+        profile_data['soil_type'] = profile_data['soilType']
+
     if 'water_access' not in profile_data and 'irrigationType' in profile_data:
         profile_data['water_access'] = profile_data['irrigationType']
         

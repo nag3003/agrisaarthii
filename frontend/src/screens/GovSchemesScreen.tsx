@@ -7,8 +7,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Linking,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { ProfileService } from '../services/profile';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 interface Scheme {
   id: string;
@@ -50,13 +56,90 @@ const SCHEMES: Scheme[] = [
 ];
 
 export const GovSchemesScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { user, logout } = useAuth();
+  const [processingVoice, setProcessingVoice] = React.useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = React.useState(true);
+  const [language, setLanguage] = React.useState('hi');
+
+  React.useEffect(() => {
+    if (user) {
+      ProfileService.getProfile(user.uid).then(p => {
+        if (p?.language) setLanguage(p.language);
+      });
+    }
+  }, [user]);
+
+  const handleVoiceCommand = (text: string) => {
+    return processLocalCommand(text, {
+      navigation,
+      language,
+      isVoiceOutputEnabled,
+      onLogout: () => {
+         Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Logout', onPress: logout, style: 'destructive' }
+            ]
+        );
+      }
+    });
+  };
+
+  const handleVoiceText = (text: string) => {
+    if (handleVoiceCommand(text)) return;
+    
+    // Check for specific scheme queries
+    const lower = text.toLowerCase();
+    const scheme = SCHEMES.find(s => 
+      s.title.toLowerCase().includes(lower) || 
+      s.description.toLowerCase().includes(lower) ||
+      lower.includes(s.title.toLowerCase())
+    );
+
+    if (scheme) {
+      if (isVoiceOutputEnabled) {
+        SpeechService.speak(`Found scheme: ${scheme.title}. ${scheme.description}`, { 
+          language: language === 'hi' ? 'hi-IN' : 'en-US' 
+        });
+      }
+      // Ideally scroll to scheme, but for now just acknowledge
+    } else {
+       if (isVoiceOutputEnabled) {
+        SpeechService.speak(`Sorry, I couldn't find a scheme matching ${text}`, { 
+          language: language === 'hi' ? 'hi-IN' : 'en-US' 
+        });
+      }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Home');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Government Schemes</Text>
+        <View style={{ flex: 1 }} />
+        <VoiceRecordButton 
+          onRecordingComplete={() => {}}
+          onSpeechEnd={handleVoiceText}
+          onSpeechPartial={() => {}}
+          onSpeechStart={() => {}}
+          isProcessing={processingVoice}
+          size={36}
+          language={language === 'hi' ? 'hi-IN' : 'en-US'}
+        />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>

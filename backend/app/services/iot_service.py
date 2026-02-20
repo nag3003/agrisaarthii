@@ -9,10 +9,28 @@ class IoTService:
         Integrates with Weather and AI for smart decisions.
         """
         from app.services.weather_service import WeatherService
-        from app.services.profile_service import ProfileManager
+        from app.services.profile_service import ProfileManager, FarmerProfile
         
-        profile = ProfileManager.get_farmer_context("919876543210")
-        weather = await WeatherService.get_weather(profile.location['lat'], profile.location['lon'])
+        profile = ProfileManager.get_farmer_context(farmer_id)
+        
+        # Fallback if profile not found (e.g., demo user or firebase disabled)
+        if not profile:
+            profile = FarmerProfile(
+                id=farmer_id,
+                name="Demo Farmer",
+                location={"lat": 17.3850, "lon": 78.4867}, # Hyderabad as default
+                primary_crops=["Tomato"],
+                language="en"
+            )
+        
+        # Handle case where location is string instead of dict
+        lat = 17.3850
+        lon = 78.4867
+        if isinstance(profile.location, dict):
+            lat = profile.location.get('lat', lat)
+            lon = profile.location.get('lon', lon)
+            
+        weather = await WeatherService.get_weather(lat, lon)
         
         motor_action = "STAY_OFF"
         voice_alert = "Moisture levels are optimal. No action needed."

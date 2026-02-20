@@ -1,7 +1,7 @@
 {
     "expo": {
-        "name": "AgriSaarthi",
-        "slug": "agrisarathi-frontend",
+        "name": "Agri",
+        "slug": "agri-frontend",
         "version": "1.0.0",
         "orientation": "portrait",
         "icon": "./assets/icon.png",
@@ -15,11 +15,15 @@
             "**/*"
         ],
         "experiments": {
-            "baseUrl": ""
         },
         "ios": {
             "supportsTablet": true,
-            "bundleIdentifier": "com.agrisarathi.app"
+            "bundleIdentifier": "com.agrisarathi.app",
+            "infoPlist": {
+                "NSMicrophoneUsageDescription": "AgriSarathi needs microphone access to listen to your voice commands and queries.",
+                "NSCameraUsageDescription": "AgriSarathi needs camera access to capture crop photos for diagnosis.",
+                "NSPhotoLibraryUsageDescription": "AgriSarathi needs access to your photos to let you upload crop images."
+            }
         },
         "android": {
             "adaptiveIcon": {
@@ -27,13 +31,28 @@
                 "backgroundColor": "#ffffff"
             },
             "package": "agrisarathi03.com",
-            "googleServicesFile": "./google-services.json"
+            "googleServicesFile": "./google-services.json",
+            "permissions": [
+                "android.permission.RECORD_AUDIO",
+                "android.permission.CAMERA",
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.WRITE_EXTERNAL_STORAGE",
+                "android.permission.INTERNET"
+            ]
         },
         "web": {
             "favicon": "./assets/favicon.png",
             "bundler": "metro"
         },
         "scheme": "agrisarathi",
-        "plugins": []
+        "plugins": [
+            [
+                "expo-image-picker",
+                {
+                    "photosPermission": "The app needs access to your photos to let you upload crop images.",
+                    "cameraPermission": "The app needs access to your camera to capture crop photos for diagnosis."
+                }
+            ]
+        ]
     }
 }

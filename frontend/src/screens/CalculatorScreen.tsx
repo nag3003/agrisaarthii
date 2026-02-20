@@ -13,16 +13,25 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Storage } from '../services/storage';
+import { useAuth } from '../context/AuthContext';
+import { ProfileService } from '../services/profile';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 const { width } = Dimensions.get('window');
 
 type TabType = 'standard' | 'farmer';
 
 export const CalculatorScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>('standard');
   const [showHelp, setShowHelp] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<Array<{ expression: string, result: string }>>([]);
+  const [processingVoice, setProcessingVoice] = useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
+  const [language, setLanguage] = useState('hi');
 
   // Standard Calculator State
   const [display, setDisplay] = useState('0');
@@ -39,7 +48,42 @@ export const CalculatorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
 
   useEffect(() => {
     loadMemory();
-  }, []);
+    if (user) {
+      ProfileService.getProfile(user.uid).then(p => {
+        if (p?.language) setLanguage(p.language);
+      });
+    }
+  }, [user]);
+
+  const handleVoiceCommand = (text: string) => {
+    return processLocalCommand(text, {
+      navigation,
+      language,
+      isVoiceOutputEnabled,
+      onLogout: () => {
+         Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Logout', onPress: logout, style: 'destructive' }
+            ]
+        );
+      }
+    });
+  };
+
+  const handleVoiceText = (text: string) => {
+    if (handleVoiceCommand(text)) return;
+    
+    // Calculator specific commands
+    // Simple math parsing could be added here, but for now just acknowledge
+    if (isVoiceOutputEnabled) {
+       SpeechService.speak(`I heard ${text}, but I can only perform calculations manually for now.`, { 
+         language: language === 'hi' ? 'hi-IN' : 'en-US' 
+       });
+    }
+  };
 
   const loadMemory = async () => {
     const savedMemory = await Storage.getItem('calc_memory');
@@ -408,8 +452,19 @@ export const CalculatorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AgriSaarthi Calculators</Text>
-        <View style={{ flexDirection: 'row' }}>
+        <Text style={styles.headerTitle}>Agri Calculators</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <View style={{ marginRight: 10 }}>
+            <VoiceRecordButton
+              onRecordingComplete={() => {}}
+              onSpeechEnd={handleVoiceText}
+              onSpeechPartial={() => {}}
+              onSpeechStart={() => {}}
+              isProcessing={processingVoice}
+              size={36}
+              language={language === 'hi' ? 'hi-IN' : 'en-US'}
+            />
+          </View>
           <TouchableOpacity onPress={() => setShowHistory(true)} style={{ marginRight: 15 }}>
             <Ionicons name="time-outline" size={24} color="#27AE60" />
           </TouchableOpacity>

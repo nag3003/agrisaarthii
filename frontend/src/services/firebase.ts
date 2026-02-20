@@ -16,7 +16,7 @@ const firebaseConfig = {
 
 // Validation to prevent silent failures
 const missingKeys = Object.entries(firebaseConfig)
-  .filter(([key, value]) => !value || value.includes('YOUR_'))
+  .filter(([key, value]) => !value || value.includes('YOUR_') || value === 'placeholder')
   .map(([key]) => key);
 
 let app;
@@ -30,7 +30,14 @@ if (missingKeys.length > 0) {
   // Create dummy objects to prevent crash on import
   // This allows the UI to render and potentially show a proper error message
   app = { name: 'mock-app', options: {} } as any;
-  auth = { currentUser: null, signOut: async () => { } } as any;
+  auth = { 
+    currentUser: null, 
+    signOut: async () => { },
+    onAuthStateChanged: (cb: any) => {
+      return () => {};
+    },
+    isMock: true
+  } as any;
   db = {} as any;
   storage = {} as any;
   analytics = null;
@@ -41,10 +48,16 @@ if (missingKeys.length > 0) {
     db = getFirestore(app);
 
     // Lazy load storage
-    storage = getStorage(app);
+    try {
+      storage = getStorage(app);
+    } catch (e) {
+      console.warn("Firebase Storage Init Error (Non-fatal):", e);
+      storage = {} as any;
+    }
 
 
-    // Analytics
+    // Analytics - Disabled on localtunnel to prevent ERR_ABORTED errors
+    /*
     if (typeof window !== 'undefined') {
       isSupported().then(yes => {
         if (yes) {
@@ -52,11 +65,20 @@ if (missingKeys.length > 0) {
         }
       });
     }
+    */
+    analytics = null;
   } catch (e) {
     console.error("Firebase Init Error:", e);
     // Fallback mocks
     app = { name: 'mock-error-app', options: {} } as any;
-    auth = { currentUser: null, signOut: async () => { } } as any;
+    auth = { 
+      currentUser: null, 
+      signOut: async () => { },
+      onAuthStateChanged: (cb: any) => {
+        return () => {};
+      },
+      isMock: true
+    } as any;
     db = {} as any;
     storage = {} as any;
   }

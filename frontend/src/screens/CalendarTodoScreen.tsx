@@ -13,8 +13,13 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
-import * as Notifications from 'expo-notifications';
+import { NotificationService } from '../services/notifications';
 import { Storage } from '../services/storage';
+import { getCalendar } from '../services/api';
+import { ProfileService } from '../services/profile';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 import { useAuth } from '../context/AuthContext';
 import { db } from '../services/firebase';
@@ -22,7 +27,7 @@ import { collection, doc, setDoc, deleteDoc, getDocs, query, where } from 'fireb
 
 // Configure notifications
 if (Platform.OS !== 'web') {
-  Notifications.setNotificationHandler({
+  NotificationService.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: true,
@@ -43,8 +48,16 @@ interface Todo {
   reminderTime?: string; // HH:mm format (deprecated in favor of time)
 }
 
+interface CropCalendarStage {
+  id: string;
+  stage: string;
+  month: string;
+  actions: string;
+  warning?: string;
+}
+
 export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -56,10 +69,30 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
   const [reminderTime, setReminderTime] = useState('08:00');
   const [is24Hour, setIs24Hour] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [primaryCrop, setPrimaryCrop] = useState<string | null>(null);
+  const [cropCalendar, setCropCalendar] = useState<CropCalendarStage[]>([]);
+  const [isLoadingCalendar, setIsLoadingCalendar] = useState(false);
+  const [processingVoice, setProcessingVoice] = useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
+  const [language, setLanguage] = useState('hi');
 
   useEffect(() => {
     const loadData = async () => {
       if (!user) return;
+
+      // Fetch user profile to get primary crop
+      try {
+        const profile = await ProfileService.getProfile(user.uid);
+        if (profile?.primaryCrop) {
+          setPrimaryCrop(profile.primaryCrop);
+          loadCropCalendar(profile.primaryCrop);
+        }
+        if (profile?.language) {
+          setLanguage(profile.language);
+        }
+      } catch (e) {
+        console.warn("Error fetching profile:", e);
+      }
 
       // Demo user check
       if (user.uid.startsWith('demo_')) {
@@ -85,6 +118,20 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     loadData();
   }, [user]);
 
+  const loadCropCalendar = async (crop: string) => {
+    setIsLoadingCalendar(true);
+    try {
+      const data = await getCalendar(crop);
+      if (Array.isArray(data)) {
+        setCropCalendar(data);
+      }
+    } catch (e) {
+      console.warn("Error fetching crop calendar:", e);
+    } finally {
+      setIsLoadingCalendar(false);
+    }
+  };
+
   const loadTodosFromStorage = async () => {
     const stored = await Storage.getItem('user_todos');
     if (stored) {
@@ -98,7 +145,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
 
   const requestPermissions = async () => {
     if (Platform.OS === 'web') return;
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await NotificationService.requestPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Denied', 'We need notification permissions to set alarms.');
     }
@@ -143,9 +190,9 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
       triggerDate.setHours(hours, minutes, 0, 0);
 
       if (triggerDate > new Date()) {
-        await Notifications.scheduleNotificationAsync({
+        await NotificationService.scheduleNotificationAsync({
           content: {
-            title: "AgriSaarthi Task Reminder",
+            title: "Agri Task Reminder",
             body: newTodoText,
             data: { todoId: newTodo.id },
           },
@@ -157,6 +204,14 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     if (user && !user.uid.startsWith('demo_')) {
       try {
         await setDoc(doc(db, 'users', user.uid, 'todos', newTodo.id), newTodo);
+        
+        // Manually update local state for Firestore Lite
+        const updatedTodos = editingTodoId
+          ? todos.map(t => t.id === editingTodoId ? newTodo : t)
+          : [...todos, newTodo];
+        setTodos(updatedTodos);
+        await Storage.setItem('user_todos', JSON.stringify(updatedTodos));
+        
         resetModal();
       } catch (error: any) {
         console.error("Error saving todo to Firestore:", error);
@@ -206,6 +261,11 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     if (user && !user.uid.startsWith('demo_')) {
       try {
         await setDoc(doc(db, 'users', user.uid, 'todos', id), updatedTodo);
+        
+        // Manually update local state for Firestore Lite
+        const updatedTodos = todos.map(t => t.id === id ? updatedTodo : t);
+        setTodos(updatedTodos);
+        await Storage.setItem('user_todos', JSON.stringify(updatedTodos));
       } catch (error) {
         console.error("Error toggling todo:", error);
         const updatedTodos = todos.map(t => t.id === id ? updatedTodo : t);
@@ -224,6 +284,11 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
         if (user && !user.uid.startsWith('demo_')) {
           try {
             await deleteDoc(doc(db, 'users', user.uid, 'todos', id));
+            
+            // Manually update local state for Firestore Lite
+            const updatedTodos = todos.filter(t => t.id !== id);
+            setTodos(updatedTodos);
+            await Storage.setItem('user_todos', JSON.stringify(updatedTodos));
           } catch (error) {
             console.error("Error deleting todo:", error);
             const updatedTodos = todos.filter(t => t.id !== id);
@@ -247,6 +312,11 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
               if (user && !user.uid.startsWith('demo_')) {
                 try {
                   await deleteDoc(doc(db, 'users', user.uid, 'todos', id));
+                  
+                  // Manually update local state for Firestore Lite
+                  const updatedTodos = todos.filter(t => t.id !== id);
+                  setTodos(updatedTodos);
+                  await Storage.setItem('user_todos', JSON.stringify(updatedTodos));
                 } catch (error) {
                   console.error("Error deleting todo:", error);
                   const updatedTodos = todos.filter(t => t.id !== id);
@@ -269,15 +339,32 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
   // Start of helper functions and render logic
 
 
-  const addTemplateTask = async (text: string, priority: 'low' | 'medium' | 'high' = 'medium') => {
+  const addTemplateTask = async (text: string, priority: 'low' | 'medium' | 'high' = 'medium', autoAlarm: boolean = false) => {
     const newTodo: Todo = {
       id: Date.now().toString(),
       text,
       date: selectedDate,
       completed: false,
       priority,
-      hasAlarm: false,
+      hasAlarm: autoAlarm,
+      time: '08:00',
     };
+
+    if (autoAlarm && Platform.OS !== 'web') {
+      const triggerDate = new Date(selectedDate);
+      triggerDate.setHours(8, 0, 0, 0);
+
+      if (triggerDate > new Date()) {
+        await NotificationService.scheduleNotificationAsync({
+          content: {
+            title: "Agri Task Reminder",
+            body: text,
+            data: { todoId: newTodo.id },
+          },
+          trigger: triggerDate,
+        });
+      }
+    }
 
     if (user && !user.uid.startsWith('demo_')) {
       try {
@@ -312,6 +399,55 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     }
   };
 
+  const getMonthName = (dateStr: string) => {
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    const date = new Date(dateStr);
+    return months[date.getMonth()];
+  };
+
+  const filteredCropCalendar = cropCalendar.filter(item => {
+    // If we have a month in the item, only show if it matches selected month
+    // Otherwise show all as general suggestions
+    if (item.month) {
+      return item.month.toLowerCase() === getMonthName(selectedDate).toLowerCase();
+    }
+    return true;
+  });
+
+  const handleVoiceCommand = (text: string) => {
+    return processLocalCommand(text, {
+      navigation,
+      language,
+      isVoiceOutputEnabled,
+      onLogout: () => {
+         Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Logout', onPress: logout, style: 'destructive' }
+            ]
+        );
+      }
+    });
+  };
+
+  const handleVoiceText = (text: string) => {
+    if (handleVoiceCommand(text)) return;
+    
+    // Check for "add task" command
+    if (text.toLowerCase().includes("add") || text.toLowerCase().includes("create")) {
+       setNewTodoText(text);
+       setModalVisible(true);
+       if (isVoiceOutputEnabled) {
+         SpeechService.speak("Opening task creator", { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+       }
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -319,6 +455,16 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Calendar & Tasks</Text>
+        <View style={{ flex: 1 }} />
+        <VoiceRecordButton 
+          onRecordingComplete={() => {}}
+          onSpeechEnd={handleVoiceText}
+          onSpeechPartial={() => {}}
+          onSpeechStart={() => {}}
+          isProcessing={processingVoice}
+          size={36}
+          language={language === 'hi' ? 'hi-IN' : 'en-US'}
+        />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -358,24 +504,37 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
 
         {/* TEMPLATE SUGGESTIONS */}
         <View style={styles.templatesSection}>
-          <Text style={styles.templateHeader}>Smart Suggestions</Text>
+          <Text style={styles.templateHeader}>
+            {primaryCrop ? `Smart Suggestions for ${primaryCrop} (${getMonthName(selectedDate)})` : 'Smart Suggestions'}
+          </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.templateScroll}>
-            <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Watering the crops', 'high')}>
-              <Ionicons name="water-outline" size={16} color="#27AE60" />
-              <Text style={styles.templateItemText}>Watering</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Applying fertilizer', 'medium')}>
-              <Ionicons name="flask-outline" size={16} color="#27AE60" />
-              <Text style={styles.templateItemText}>Fertilizer</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Check for pests', 'high')}>
-              <Ionicons name="bug-outline" size={16} color="#27AE60" />
-              <Text style={styles.templateItemText}>Pest Check</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Harvesting', 'high')}>
-              <Ionicons name="cut-outline" size={16} color="#27AE60" />
-              <Text style={styles.templateItemText}>Harvest</Text>
-            </TouchableOpacity>
+            {filteredCropCalendar.length > 0 ? (
+              filteredCropCalendar.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.templateItem}
+                  onPress={() => addTemplateTask(`${item.stage}: ${item.actions.substring(0, 30)}...`, 'high', true)}
+                >
+                  <Ionicons name="leaf-outline" size={16} color="#27AE60" />
+                  <Text style={styles.templateItemText}>{item.stage}</Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <>
+                <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Watering the crops', 'high')}>
+                  <Ionicons name="water-outline" size={16} color="#27AE60" />
+                  <Text style={styles.templateItemText}>Watering</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Applying fertilizer', 'medium')}>
+                  <Ionicons name="flask-outline" size={16} color="#27AE60" />
+                  <Text style={styles.templateItemText}>Fertilizer</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.templateItem} onPress={() => addTemplateTask('Check for pests', 'high')}>
+                  <Ionicons name="bug-outline" size={16} color="#27AE60" />
+                  <Text style={styles.templateItemText}>Pest Check</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </ScrollView>
         </View>
 

@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { AuthService } from '../services/auth';
 import { ProfileService, UserRole, UserProfile } from '../services/profile';
 import { Storage } from '../services/storage';
+import { logger } from '../utils/logger';
 
 import { useAuth } from '../context/AuthContext';
 
@@ -13,14 +14,17 @@ export const OnboardingScreen: React.FC = () => {
   const user = AuthService.getCurrentUser();
 
   const [name, setName] = useState('');
+
   const [role, setRole] = useState<UserRole>('farmer');
   const [crop, setCrop] = useState('');
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
 
   const saveProfile = async () => {
+    logger.info('Onboarding', 'Attempting to save profile', { uid: user?.uid });
     if (!user) {
-      Alert.alert('Error', 'No authenticated user found');
+      Alert.alert('Error', 'No authenticated user found. Please login again.');
+      logger.warn('Onboarding', 'Save attempted without user');
       return;
     }
 
@@ -46,6 +50,7 @@ export const OnboardingScreen: React.FC = () => {
         primaryCrop: role === 'farmer' ? crop.trim() : undefined,
       };
 
+      logger.debug('Onboarding', 'Saving profile data', profile);
       const result = await ProfileService.saveProfile(profile);
 
       if (!result.success) {
@@ -58,11 +63,14 @@ export const OnboardingScreen: React.FC = () => {
         role: role
       };
 
+      logger.info('Onboarding', 'Profile saved, updating session...');
       await Storage.saveUser(userSession);
       await refreshSession();
       
+      logger.info('Onboarding', 'Session refreshed, showing success');
       Alert.alert('Success', 'Profile created successfully!');
     } catch (error: any) {
+      logger.error('Onboarding', 'Failed to save profile', { error: error.message });
       Alert.alert('Error', 'Failed to save profile: ' + error.message);
     } finally {
       setLoading(false);

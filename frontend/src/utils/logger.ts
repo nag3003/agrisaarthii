@@ -48,9 +48,17 @@ class Logger {
       
       // Batch sync if possible, or just sync critical ones
       for (const entry of batch) {
-        await fetch(`${backendUrl}/api/usage`, { 
+        // Skip sync if backend URL looks like a placeholder or is invalid
+        if (backendUrl.includes('loca.lt') && backendUrl.includes('honest-impala')) {
+            // This is a known dead tunnel from previous session, skip to avoid ERR_FAILED
+            continue;
+        }
+
+        await fetch(`${backendUrl}/api/logs/usage`, { 
           method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             action: entry.message,
             details: JSON.stringify(entry.details || {}),

@@ -1,4 +1,5 @@
 import { auth, db } from './firebase';
+import { Storage } from './storage';
 import {
   onAuthStateChanged,
   signOut,
@@ -21,13 +22,52 @@ WebBrowser.maybeCompleteAuthSession();
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
 
 export function useGoogleAuth() {
+  // Use a stable dummy client ID if not provided to prevent crash on web
+  const effectiveClientId = GOOGLE_CLIENT_ID && !GOOGLE_CLIENT_ID.includes('YOUR_') 
+    ? GOOGLE_CLIENT_ID 
+    : (Platform.OS === 'web' ? 'dummy-client-id.apps.googleusercontent.com' : undefined);
+
   const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId: GOOGLE_CLIENT_ID,
+    clientId: effectiveClientId,
     // On web, we don't strictly need redirectUri here if using popup
   });
 
   const signInWithGoogle = async () => {
     try {
+      // Check if we are in mock mode
+      // @ts-ignore
+      if (auth.isMock) {
+        logger.warn('Auth', 'Mock Auth detected, simulating Google Sign-In');
+        const mockUser = {
+          uid: 'mock-google-user-' + Math.floor(Math.random() * 1000),
+          email: 'mock.google@gmail.com',
+          displayName: 'Mock Google User',
+          emailVerified: true,
+          isAnonymous: false,
+          metadata: {},
+          providerData: [],
+          refreshToken: '',
+          tenantId: null,
+          delete: async () => {},
+          getIdToken: async () => 'mock-token',
+          getIdTokenResult: async () => ({ token: 'mock-token' } as any),
+          reload: async () => {},
+          toJSON: () => ({}),
+          phoneNumber: null,
+          photoURL: null,
+        } as any;
+        
+        // Save to storage so AuthContext picks it up
+        await Storage.saveUser({
+          uid: mockUser.uid,
+          email: mockUser.email,
+          displayName: mockUser.displayName,
+          role: 'farmer' // Default role
+        });
+        
+        return mockUser;
+      }
+
       const clientId = GOOGLE_CLIENT_ID;
 
       if (!clientId || clientId.includes('YOUR_')) {
@@ -72,26 +112,22 @@ export function useGoogleAuth() {
 }
 
 // --- APPLE AUTH ---
-import * as AppleAuthentication from 'expo-apple-authentication';
+import { AppleAuthService } from './appleAuth';
 
 export function useAppleAuth() {
   const signInWithApple = async () => {
     try {
       logger.info('Auth', 'Initiating Apple Sign-In...');
 
-      if (Platform.OS === 'android') {
-        throw new Error('Apple Sign-In is not supported on Android devices.');
-      }
-
-      const isAvailable = await AppleAuthentication.isAvailableAsync();
+      const isAvailable = await AppleAuthService.isAvailableAsync();
       if (!isAvailable) {
         throw new Error('Apple Sign-In is not available on this device.');
       }
 
-      const credential = await AppleAuthentication.signInAsync({
+      const credential = await AppleAuthService.signInAsync({
         requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          AppleAuthService.Scopes.FULL_NAME,
+          AppleAuthService.Scopes.EMAIL,
         ],
       });
 
@@ -140,6 +176,14 @@ export const AuthService = {
 
   login: async (email: string, password: string) => {
     try {
+      // @ts-ignore
+      if (auth.isMock) {
+        logger.info('Auth', 'Mock login successful');
+        const mockUser = { uid: 'mock-' + email, email, emailVerified: true } as any;
+        await Storage.saveUser({ uid: mockUser.uid, email, role: 'farmer' });
+        return { user: mockUser, success: true };
+      }
+
       const result = await signInWithEmailAndPassword(auth, email, password);
       logger.info('Auth', 'Firebase login successful', { uid: result.user.uid });
       return { user: result.user, success: true };
@@ -164,6 +208,14 @@ export const AuthService = {
 
   register: async (email: string, password: string) => {
     try {
+      // @ts-ignore
+      if (auth.isMock) {
+        logger.info('Auth', 'Mock registration successful');
+        const mockUser = { uid: 'mock-' + email, email, emailVerified: true } as any;
+        await Storage.saveUser({ uid: mockUser.uid, email, role: 'farmer' });
+        return { user: mockUser, success: true };
+      }
+
       const result = await createUserWithEmailAndPassword(auth, email, password);
       logger.info('Auth', 'Firebase registration successful', { uid: result.user.uid });
       return { user: result.user, success: true };

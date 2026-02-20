@@ -1,15 +1,43 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Logo } from '../components/Logo';
 import { AuthService } from '../services/auth';
 import { Storage } from '../services/storage';
 import { useNavigation } from '@react-navigation/native';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 import { useAuth } from '../context/AuthContext';
 
 export const LandownerHome = () => {
   const navigation = useNavigation<any>();
-  const { logout } = useAuth();
+  const { logout, role } = useAuth();
+  const [processingVoice, setProcessingVoice] = React.useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = React.useState(true);
+
+  const handleVoiceCommand = (text: string) => {
+    return processLocalCommand(text, {
+      navigation,
+      language: 'hi', // Default to Hindi
+      isVoiceOutputEnabled,
+      onLogout: handleLogout,
+      role
+    });
+  };
+
+  const handleVoiceText = (text: string) => {
+    if (handleVoiceCommand(text)) return;
+    
+    // Landowner specific commands could be added here
+    if (isVoiceOutputEnabled) {
+       SpeechService.speak(`I heard ${text}, but I don't have specific landowner commands yet.`, { 
+         language: 'hi-IN' 
+       });
+    }
+  };
+
   const handleLogout = async () => {
     Alert.alert(
       'Logout', 
@@ -34,9 +62,25 @@ export const LandownerHome = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={{ position: 'absolute', top: 50, right: 20, zIndex: 10 }}>
+        <VoiceRecordButton 
+          onRecordingComplete={() => {}}
+          onSpeechEnd={handleVoiceText}
+          onSpeechPartial={() => {}}
+          onSpeechStart={() => {}}
+          isProcessing={processingVoice}
+          size={36}
+          language={'hi-IN'}
+        />
+      </View>
       <ScrollView contentContainerStyle={styles.content}>
+        <Logo 
+          containerStyle={{ position: 'absolute', top: 10, left: 0, right: 0, zIndex: -1 }}
+          iconSize={22}
+          textStyle={{ fontSize: 18 }}
+        />
         <Text style={styles.title}>Landowner Dashboard</Text>
-        <Text style={styles.subtitle}>Welcome to AgriSaarthi Landowner Portal</Text>
+        <Text style={styles.subtitle}>Welcome to Agri Landowner Portal</Text>
         
         <View style={styles.card}>
           <Text style={styles.cardText}>Manage your land and workers from this dashboard.</Text>
@@ -58,7 +102,7 @@ export const LandownerHome = () => {
 
             <TouchableOpacity 
               style={styles.toolItem}
-              onPress={() => navigation.navigate('Calendar')}
+              onPress={() => navigation.navigate('CalendarTodo')}
             >
               <View style={[styles.toolIcon, { backgroundColor: '#F3E5F5' }]}>
                 <Ionicons name="calendar" size={24} color="#7B1FA2" />
@@ -98,6 +142,12 @@ export const LandownerHome = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5FDF9' },
+  logo: {
+    color: '#27AE60',
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   content: { padding: 24, alignItems: 'center' },
   title: { color: '#27AE60', fontSize: 32, fontWeight: '800', marginBottom: 8 },
   subtitle: { color: '#666', fontSize: 16, marginBottom: 32, textAlign: 'center' },

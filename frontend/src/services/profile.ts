@@ -43,13 +43,31 @@ export const ProfileService = {
       // Attempt to save via Backend API
       if (backendUrl) {
         try {
-          await axios.put(`${backendUrl}/api/profile/update`, profileData);
+          logger.debug('Profile', 'Attempting backend save...', { url: `${backendUrl}/api/profile/update` });
+          await axios.put(`${backendUrl}/api/profile/update`, profileData, {
+            timeout: 15000, // Increased for tunnel latency
+            headers: {
+              'bypass-tunnel-reminder': 'true'
+            }
+          });
           logger.info('Profile', 'Profile saved via Backend API', { uid: profile.uid });
           return { success: true };
         } catch (apiError: any) {
-          logger.warn('Profile', 'Backend API failed, falling back to direct Firestore if possible', { error: apiError.message });
+          logger.warn('Profile', 'Backend API save failed, falling back', { 
+            error: apiError.message,
+            code: apiError.code,
+            isAxiosError: !!apiError.isAxiosError 
+          });
           // Fallthrough to Firestore direct write
         }
+      }
+
+      logger.debug('Profile', 'Attempting direct Firestore save...', { uid: profile.uid });
+      
+      // Safety check for mock Firestore
+      if ((db as any).isMock || !db) {
+        logger.warn('Profile', 'Safe Mode: Direct Firestore save skipped (API disabled).');
+        return { success: true, apiDisabled: true };
       }
 
       await setDoc(doc(db, 'users', profile.uid), profileData, { merge: true });
@@ -71,9 +89,12 @@ export const ProfileService = {
   },
 
   updateLoginMetadata: async (uid: string) => {
-    // Keep direct for metadata or move to API if strict? 
-    // Let's keep direct for lightweight or ignore for now to avoid breaking too much
     try {
+      // Safety check for mock Firestore
+      if ((db as any).isMock || !db) {
+        return;
+      }
+      
       await setDoc(doc(db, 'users', uid), {
         lastLogin: new Date().toISOString(),
       }, { merge: true });
@@ -88,14 +109,56 @@ export const ProfileService = {
       const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
       if (backendUrl) {
         try {
-          const response = await axios.get(`${backendUrl}/api/profile/${uid}`);
+          logger.debug('Profile', 'Attempting backend fetch...', { uid });
+          const response = await axios.get(`${backendUrl}/api/profile/${uid}`, {
+            timeout: 15000, // Increased for tunnel latency
+            headers: {
+              'bypass-tunnel-reminder': 'true'
+            }
+          });
           if (response.data) {
             logger.info('Profile', 'Profile fetched via Backend API', { uid });
-            return response.data as UserProfile;
+            // Map backend FarmerProfile back to frontend UserProfile if needed
+            const b = response.data;
+            let state = b.state;
+            let district = b.district;
+
+            // Handle nested location object from backend if present
+            if (b.location && typeof b.location === 'object') {
+              state = state || b.location.state;
+              district = district || b.location.district;
+            }
+
+            return {
+              uid: b.id || uid,
+              name: b.name,
+              email: b.email,
+              role: b.role || 'farmer',
+              location: typeof b.location === 'string' ? b.location : (b.location?.raw || 'Unknown'),
+              state: state,
+              district: district,
+              language: b.language,
+              primaryCrop: b.primary_crops?.[0],
+              landSize: b.land_size ? Number(b.land_size) : undefined,
+              irrigationType: b.water_access,
+              riskLevel: b.risk_tolerance,
+              photoURL: b.photo_url,
+            };
           }
-        } catch (apiError) {
-          logger.warn('Profile', 'Backend API fetch failed, falling back', { error: apiError });
+        } catch (apiError: any) {
+          logger.warn('Profile', 'Backend API fetch failed, falling back', { 
+            error: apiError.message,
+            code: apiError.code
+          });
         }
+      }
+
+      logger.debug('Profile', 'Attempting direct Firestore fetch...', { uid });
+      
+      // Safety check for mock Firestore
+      if ((db as any).isMock || !db) {
+        logger.warn('Profile', 'Safe Mode: Direct Firestore fetch skipped (API disabled).');
+        return null;
       }
 
       const snap = await getDoc(doc(db, 'users', uid));
@@ -127,9 +190,30 @@ export const ProfileService = {
       await uploadBytes(storageRef, blob);
       const url = await getDownloadURL(storageRef);
 
-      // Update Firestore with new photoURL
-      await setDoc(doc(db, 'users', uid), { photoURL: url }, { merge: true });
-      logger.info('Profile', 'Profile picture updated', { uid, url });
+      // Update Firestore with new photoURL if not in mock mode
+      if (!(db as any).isMock && db) {
+        await setDoc(doc(db, 'users', uid), { photoURL: url }, { merge: true });
+        logger.info('Profile', 'Profile picture updated (Direct)', { uid, url });
+      } else {
+        logger.warn('Profile', 'Safe Mode: Firestore profile picture update skipped.');
+      }
+
+      // Update Backend with new photoURL if available
+      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
+      if (backendUrl) {
+        try {
+          await axios.put(`${backendUrl}/api/profile/update`, {
+            uid,
+            photoURL: url
+          }, {
+            headers: { 'bypass-tunnel-reminder': 'true' },
+            timeout: 10000
+          });
+          logger.info('Profile', 'Profile picture updated via Backend API', { uid });
+        } catch (apiErr: any) {
+          logger.warn('Profile', 'Backend photoURL update failed', { error: apiErr.message });
+        }
+      }
 
       return { success: true, url };
     } catch (error: any) {

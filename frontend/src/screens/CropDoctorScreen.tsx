@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -10,73 +10,177 @@ import {
     ScrollView,
     Alert,
     Platform,
+    TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { diagnoseCrop } from '../services/api';
+import { ImagePickerService } from '../services/imagePicker';
+import { diagnoseCrop, sendVoice } from '../services/api';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { SpeechService } from '../services/speech';
+import { useAuth } from '../context/AuthContext';
+import { ProfileService, UserProfile } from '../services/profile';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
 
 export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+    const { user, logout, role } = useAuth();
+    const [farmer, setFarmer] = useState<UserProfile | null>(null);
     const [image, setImage] = useState<string | null>(null);
     const [analyzing, setAnalyzing] = useState(false);
     const [result, setResult] = useState<any>(null);
+    const [description, setDescription] = useState('');
+    const [processingVoice, setProcessingVoice] = useState(false);
+    const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
+    const [listeningText, setListeningText] = useState('');
 
-    const pickImage = async (source: 'camera' | 'gallery') => {
+    useEffect(() => {
+        if (user) {
+            ProfileService.getProfile(user.uid).then(profile => {
+                if (profile) setFarmer(profile);
+            });
+        }
+    }, [user]);
+
+    const handleVoiceCommand = (text: string) => {
+        return processLocalCommand(text, {
+            navigation,
+            language: farmer?.language || 'hi',
+            isVoiceOutputEnabled,
+            onLogout: () => {
+                Alert.alert(
+                    'Logout',
+                    'Are you sure you want to logout?',
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Logout', onPress: logout, style: 'destructive' }
+                    ]
+                );
+            },
+            role
+        });
+    };
+
+    const handleVoiceComplete = async (uri: string) => {
+        // Prime speech service immediately on user gesture
+        if (isVoiceOutputEnabled) {
+            SpeechService.speak("", { volume: 0 });
+        }
+        
+        setProcessingVoice(true);
         try {
-            let permissionResult;
-
-            if (source === 'camera') {
-                permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-            } else {
-                permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            }
-
-            if (permissionResult.status !== 'granted') {
-                Alert.alert("Permission Denied", "We need access to your camera/gallery to diagnose crops.");
-                return;
-            }
-
-            const pickerResult = source === 'camera'
-                ? await ImagePicker.launchCameraAsync({ quality: 0.5, allowsEditing: true })
-                : await ImagePicker.launchImageLibraryAsync({ quality: 0.5, allowsEditing: true });
-
-            if (!pickerResult.canceled && pickerResult.assets[0].uri) {
-                setImage(pickerResult.assets[0].uri);
-                analyzeImage(pickerResult.assets[0].uri);
+            const response = await sendVoice(uri);
+            if (response && response.text) {
+                if (handleVoiceCommand(response.text)) return;
+                setDescription(prev => prev ? `${prev} ${response.text}` : response.text);
             }
         } catch (error) {
-            Alert.alert("Error", "Failed to capture image.");
+            console.error('Failed to process voice', error);
+        } finally {
+            setProcessingVoice(false);
         }
     };
 
-    const analyzeImage = async (uri: string) => {
+    const handleVoiceText = (text: string) => {
+        if (isVoiceOutputEnabled) {
+            SpeechService.speak("", { volume: 0 });
+        }
+        if (handleVoiceCommand(text)) return;
+        setDescription(prev => prev ? `${prev} ${text}` : text);
+    };
+
+    const pickImage = async (source: 'camera' | 'gallery') => {
+        console.log(`[CropDoctor] Button pressed: ${source}`);
+        try {
+            // Permission handling (Mobile only)
+            if (Platform.OS !== 'web') {
+                const permission = source === 'camera' 
+                    ? await ImagePicker.requestCameraPermissionsAsync()
+                    : await ImagePicker.requestMediaLibraryPermissionsAsync();
+                
+                if (permission.status !== 'granted') {
+                    Alert.alert("Permission Required", `We need ${source} access to scan crops.`);
+                    return;
+                }
+            }
+
+            const options: ImagePicker.ImagePickerOptions = {
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: Platform.OS !== 'web',
+                aspect: [4, 3],
+                quality: 0.7,
+            };
+
+            let result;
+            if (source === 'camera') {
+                // This will open the real-time camera on both phone and laptop (webcam)
+                result = await ImagePicker.launchCameraAsync(options);
+            } else {
+                // This opens the gallery on phone or file selector on laptop
+                result = await ImagePicker.launchImageLibraryAsync(options);
+            }
+
+            console.log('[CropDoctor] Picker Result Status:', result.canceled ? 'Canceled' : 'Success');
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const selectedImage = result.assets[0].uri;
+                console.log('[CropDoctor] Selected Image URI:', selectedImage);
+                setImage(selectedImage);
+            }
+        } catch (error) {
+            console.error('[CropDoctor] Image Picking Error:', error);
+            // On some web environments, the picker might fail due to iframe restrictions
+            if (Platform.OS === 'web') {
+                Alert.alert("Browser Restriction", "Your browser might be blocking the file picker. Please try refreshing or using a different browser.");
+            } else {
+                Alert.alert("Error", "Could not open camera or gallery. Please try again.");
+            }
+        }
+    };
+
+    const analyzeImage = async () => {
+        if (!image) {
+            Alert.alert("No Image", "Please capture or upload an image first.");
+            return;
+        }
+
+        console.log('[CropDoctor] Starting analysis for image:', image);
         setAnalyzing(true);
         setResult(null);
         try {
-            const response = await diagnoseCrop(uri);
-            // Simulate backend response structure matching our mock/real AI
-            // If the backend returns just diagnosis string, wrap it.
-            // If it returns full JSON, use it.
-
+            const response = await diagnoseCrop(image, description);
+            console.log('[CropDoctor] Diagnosis Response:', response);
+            
             if (response && (response.diagnosis || response.remedy)) {
                 setResult(response);
+                
+                // Voice output for diagnosis
+                if (isVoiceOutputEnabled) {
+                    const textToSpeak = `${response.diagnosis}. ${response.remedy}`;
+                    SpeechService.speak(textToSpeak, {
+                        language: farmer?.language || 'hi'
+                    });
+                }
             } else {
-                // Fallback if backend structure differs
+                console.warn('[CropDoctor] Unexpected response format:', response);
                 setResult({
                     diagnosis: "Analysis Complete",
                     confidence: 85,
                     remedy: typeof response === 'string' ? response : JSON.stringify(response)
                 });
             }
-        } catch (error) {
-            Alert.alert("Analysis Failed", "Could not analyze the image. Please try again.");
+        } catch (error: any) {
+            console.error('[CropDoctor] Analysis Error:', error);
+            Alert.alert("Analysis Failed", error.message || "Could not analyze the image. Please try again.");
         } finally {
             setAnalyzing(false);
+            console.log('[CropDoctor] Analysis process finished.');
         }
     };
 
     const reset = () => {
         setImage(null);
         setResult(null);
+        setDescription('');
     };
 
     return (
@@ -86,38 +190,136 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                 <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
                     <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Crop Doctor AI</Text>
+                <Text style={styles.headerTitle}>AI Crop Doctor</Text>
+                <View style={{ flex: 1 }} />
+                <VoiceRecordButton 
+                  onRecordingComplete={() => {}}
+                  onSpeechEnd={handleVoiceText}
+                  onSpeechPartial={() => {}}
+                  onSpeechStart={() => {}}
+                  isProcessing={processingVoice}
+                  size={36}
+                  language={farmer?.language === 'hi' ? 'hi-IN' : 'en-US'}
+                />
+                <TouchableOpacity 
+                    style={[styles.voiceToggle, isVoiceOutputEnabled && styles.voiceToggleActive]} 
+                    onPress={() => {
+                        const newState = !isVoiceOutputEnabled;
+                        setIsVoiceOutputEnabled(newState);
+                        if (newState) {
+                            SpeechService.speak("Voice output enabled", { language: 'en-US' });
+                        } else {
+                            SpeechService.stop();
+                        }
+                    }}
+                >
+                    <Ionicons 
+                        name={isVoiceOutputEnabled ? "volume-high" : "volume-mute"} 
+                        size={22} 
+                        color={isVoiceOutputEnabled ? "#27AE60" : "#666"} 
+                    />
+                </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
-
-                {/* Image Preview / Placeholder */}
-                <View style={styles.imageContainer}>
+                
+                {/* Upload Section */}
+                <View style={styles.uploadArea}>
                     {image ? (
-                        <Image source={{ uri: image }} style={styles.previewImage} />
-                    ) : (
-                        <View style={styles.placeholder}>
-                            <Ionicons name="scan-outline" size={64} color="#27AE60" />
-                            <Text style={styles.placeholderText}>
-                                Take a photo of the affected crop leaf or area
-                            </Text>
+                        <View style={styles.previewContainer}>
+                            <Image source={{ uri: image }} style={styles.previewImage} />
+                            <TouchableOpacity style={styles.removeBtn} onPress={() => setImage(null)}>
+                                <Ionicons name="close-circle" size={32} color="#FF5252" />
+                            </TouchableOpacity>
                         </View>
-                    )}
+                    ) : (
+                        <View style={styles.placeholderContainer}>
+                            <View style={styles.pickerRow}>
+                                <TouchableOpacity 
+                                    style={styles.pickerCard} 
+                                    onPress={() => pickImage('camera')}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.iconCircle, { backgroundColor: '#E8F5E9' }]}>
+                                        <Ionicons name="camera" size={32} color="#27AE60" />
+                                    </View>
+                                    <Text style={[styles.pickerText, { color: '#27AE60' }]}>Take Photo</Text>
+                                </TouchableOpacity>
 
-                    {/* Action Buttons */}
-                    {!analyzing && !result && (
-                        <View style={styles.actionRow}>
-                            <TouchableOpacity style={styles.actionBtn} onPress={() => pickImage('camera')}>
-                                <Ionicons name="camera" size={24} color="white" />
-                                <Text style={styles.actionBtnText}>Camera</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={[styles.actionBtn, styles.galleryBtn]} onPress={() => pickImage('gallery')}>
-                                <Ionicons name="images" size={24} color="#27AE60" />
-                                <Text style={[styles.actionBtnText, { color: '#27AE60' }]}>Gallery</Text>
-                            </TouchableOpacity>
+                                <TouchableOpacity 
+                                    style={[styles.pickerCard, { borderColor: '#E3F2FD' }]} 
+                                    onPress={() => pickImage('gallery')}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={[styles.iconCircle, { backgroundColor: '#E3F2FD' }]}>
+                                        <Ionicons name="images" size={32} color="#2196F3" />
+                                    </View>
+                                    <Text style={[styles.pickerText, { color: '#2196F3' }]}>Gallery</Text>
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.uploadHint}>Capture or Upload Photo (JPG, PNG)</Text>
+                            
+                            {Platform.OS === 'web' && (
+                                <TouchableOpacity 
+                                    style={styles.demoBtn} 
+                                    onPress={() => setImage('https://images.unsplash.com/photo-1597362925123-77861d3fbac7?q=80&w=400')}
+                                >
+                                    <Text style={styles.demoBtnText}>Try with Sample Image</Text>
+                                </TouchableOpacity>
+                            )}
                         </View>
                     )}
                 </View>
+
+                {/* Description Section */}
+                <View style={styles.sectionHeaderRow}>
+                    <View style={styles.sectionTitleGroup}>
+                        <Ionicons name="mic-outline" size={20} color="#27AE60" />
+                        <Text style={styles.sectionTitle}>Describe the Issue</Text>
+                    </View>
+                    <View style={styles.optionalBadge}>
+                        <Text style={styles.optionalText}>Optional</Text>
+                    </View>
+                </View>
+
+                <View style={styles.voiceInputArea}>
+                    <VoiceRecordButton 
+                        onRecordingComplete={handleVoiceComplete}
+                        onSpeechEnd={(text) => {
+                            handleVoiceText(text);
+                            setListeningText('');
+                        }}
+                        onSpeechPartial={(text) => setListeningText(text)}
+                        onSpeechStart={() => setListeningText('')}
+                        isProcessing={processingVoice}
+                        size={64}
+                        language={farmer?.language === 'hi' ? 'hi-IN' : 'en-US'}
+                    />
+                    <View style={styles.inputWrapper}>
+                        {listeningText ? (
+                             <Text style={{ fontStyle: 'italic', color: '#666', marginBottom: 5 }}>{listeningText}</Text>
+                        ) : null}
+                        <TextInput
+                            style={styles.textInput}
+                            placeholder={processingVoice ? "Transcribing..." : "Tap the mic and say: 'Leaves are yellowing...'"}
+                            placeholderTextColor="#999"
+                            multiline
+                            value={description}
+                            onChangeText={setDescription}
+                        />
+                    </View>
+                </View>
+
+                {/* Submit Button */}
+                {!result && !analyzing && (
+                    <TouchableOpacity 
+                        style={[styles.submitBtn, !image && styles.submitBtnDisabled]} 
+                        onPress={analyzeImage}
+                        disabled={!image || analyzing}
+                    >
+                        <Text style={styles.submitBtnText}>Get AI Diagnosis</Text>
+                    </TouchableOpacity>
+                )}
 
                 {/* Loading State */}
                 {analyzing && (
@@ -160,7 +362,7 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F5FDF9',
+        backgroundColor: 'white',
     },
     header: {
         flexDirection: 'row',
@@ -168,115 +370,202 @@ const styles = StyleSheet.create({
         padding: 16,
         backgroundColor: 'white',
         borderBottomWidth: 1,
-        borderBottomColor: '#E0F2E9',
+        borderBottomColor: '#F0F0F0',
     },
     backBtn: { padding: 4 },
     headerTitle: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '700',
         color: '#1A1A1A',
         marginLeft: 16,
     },
+    voiceToggle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F0F0F0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
+    },
+    voiceToggleActive: {
+        backgroundColor: '#E8F5E9',
+    },
     scrollContent: {
-        padding: 20,
+        padding: 16,
         paddingBottom: 40,
     },
-    imageContainer: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    previewImage: {
+    uploadArea: {
         width: '100%',
-        height: 300,
-        borderRadius: 20,
-        resizeMode: 'cover',
-        borderWidth: 1,
+        height: 280,
+        borderRadius: 16,
+        borderWidth: 2,
         borderColor: '#E0E0E0',
-    },
-    placeholder: {
-        width: '100%',
-        height: 300,
-        borderRadius: 20,
-        backgroundColor: '#E8F5E9',
+        borderStyle: 'dashed',
+        backgroundColor: '#FAFAFA',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#C8E6C9',
-        borderStyle: 'dashed',
+        marginBottom: 24,
+        overflow: 'hidden',
+    },
+    placeholderContainer: {
+        alignItems: 'center',
+        width: '100%',
         padding: 20,
     },
-    placeholderText: {
-        marginTop: 16,
-        color: '#666',
-        textAlign: 'center',
-        fontSize: 16,
-    },
-    actionRow: {
+    pickerRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        width: '100%',
-        marginTop: 20,
-    },
-    actionBtn: {
-        flex: 1,
-        backgroundColor: '#27AE60',
-        flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'center',
-        padding: 16,
-        borderRadius: 12,
-        marginRight: 10,
-        shadowColor: '#27AE60',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 4,
+        gap: 20,
+        marginBottom: 20,
     },
-    galleryBtn: {
+    pickerCard: {
+        width: 120,
+        height: 120,
         backgroundColor: 'white',
-        borderWidth: 1,
-        borderColor: '#27AE60',
-        marginRight: 0,
-        marginLeft: 10,
-    },
-    actionBtnText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginLeft: 8,
-    },
-    loadingContainer: {
-        backgroundColor: 'white',
-        padding: 30,
-        borderRadius: 20,
+        borderRadius: 16,
+        justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E8F5E9',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 10,
         elevation: 2,
     },
-    loadingText: {
+    iconCircle: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    pickerText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    uploadHint: {
+        fontSize: 14,
+        color: '#999',
+        fontWeight: '500',
+    },
+    demoBtn: {
         marginTop: 16,
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1A1A1A',
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: '#F0F0F0',
+    },
+    demoBtnText: {
+        fontSize: 12,
+        color: '#666',
+        fontWeight: '600',
+        textDecorationLine: 'underline',
+    },
+    previewContainer: {
+        width: '100%',
+        height: '100%',
+    },
+    previewImage: {
+        width: '100%',
+        height: '100%',
+        resizeMode: 'cover',
+    },
+    removeBtn: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        backgroundColor: 'white',
+        borderRadius: 20,
+    },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    sectionTitleGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    sectionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#333',
+    },
+    optionalBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    optionalText: {
+        fontSize: 12,
+        color: '#666',
+    },
+    voiceInputArea: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 24,
+    },
+    inputWrapper: {
+        flex: 1,
+        height: 80,
+        backgroundColor: '#424242',
+        borderRadius: 12,
+        padding: 12,
+    },
+    textInput: {
+        flex: 1,
+        color: 'white',
+        fontSize: 14,
+        textAlignVertical: 'top',
+    },
+    submitBtn: {
+        backgroundColor: '#27AE60',
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    submitBtnDisabled: {
+        backgroundColor: '#A5D6A7',
+    },
+    submitBtnText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    loadingContainer: {
+        padding: 24,
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#333',
     },
     loadingSub: {
-        marginTop: 6,
+        fontSize: 14,
         color: '#666',
+        marginTop: 4,
     },
     resultCard: {
         backgroundColor: 'white',
-        padding: 24,
-        borderRadius: 20,
-        shadowColor: '#27AE60',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 5,
+        padding: 20,
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: 'rgba(39, 174, 96, 0.1)',
+        borderColor: '#E0F2E9',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 3,
     },
     resultHeader: {
         flexDirection: 'row',
@@ -284,27 +573,26 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
     },
     diagnosisLabel: {
-        color: '#666',
         fontSize: 12,
+        color: '#666',
         fontWeight: '700',
-        letterSpacing: 1,
         marginBottom: 4,
     },
     diagnosisTitle: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: '800',
-        color: '#E74C3C', // Red for disease, typical usage
+        color: '#D32F2F',
     },
     confidenceBadge: {
         backgroundColor: '#E8F5E9',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
     },
     confidenceText: {
-        color: '#27AE60',
-        fontWeight: '700',
         fontSize: 12,
+        color: '#2E7D32',
+        fontWeight: '700',
     },
     divider: {
         height: 1,
@@ -312,28 +600,26 @@ const styles = StyleSheet.create({
         marginVertical: 16,
     },
     sectionHeader: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
-        color: '#1A1A1A',
+        color: '#333',
         marginBottom: 8,
     },
     remedyText: {
-        fontSize: 16,
+        fontSize: 15,
         color: '#444',
-        lineHeight: 24,
+        lineHeight: 22,
     },
     resetBtn: {
-        marginTop: 24,
-        backgroundColor: '#F5FDF9',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
+        marginTop: 20,
+        paddingVertical: 12,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: '#27AE60',
+        alignItems: 'center',
     },
     resetBtnText: {
         color: '#27AE60',
-        fontWeight: 'bold',
-        fontSize: 16,
+        fontWeight: '700',
     },
 });

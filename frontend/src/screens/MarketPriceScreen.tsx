@@ -10,11 +10,17 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { LocationService } from '../services/location';
 import { ProfileService } from '../services/profile';
+import { getMarketPrices } from '../services/api';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 interface MarketItem {
   id: string;
@@ -98,55 +104,255 @@ const MOCK_DATA: MarketItem[] = [
   },
 ];
 
+const generateMockData = (district: string, state: string): MarketItem[] => {
+  return [
+    {
+      id: `mock-1-${district}`,
+      commodity: 'Wheat',
+      market: `${district} Mandi`,
+      state: state,
+      district: district,
+      minPrice: 2150,
+      maxPrice: 2450,
+      modalPrice: 2300,
+      unit: 'Quintal',
+      arrivalDate: new Date().toISOString().split('T')[0],
+      trend: 'up',
+    },
+    {
+      id: `mock-2-${district}`,
+      commodity: 'Rice (Paddy)',
+      market: `${district} APMC`,
+      state: state,
+      district: district,
+      minPrice: 2800,
+      maxPrice: 3200,
+      modalPrice: 3000,
+      unit: 'Quintal',
+      arrivalDate: new Date().toISOString().split('T')[0],
+      trend: 'stable',
+    },
+    {
+      id: `mock-3-${district}`,
+      commodity: 'Cotton',
+      market: `${district} Market Yard`,
+      state: state,
+      district: district,
+      minPrice: 6900,
+      maxPrice: 7600,
+      modalPrice: 7250,
+      unit: 'Quintal',
+      arrivalDate: new Date().toISOString().split('T')[0],
+      trend: 'down',
+    },
+    {
+      id: `mock-4-${district}`,
+      commodity: 'Soyabean',
+      market: `${district} Mandi`,
+      state: state,
+      district: district,
+      minPrice: 4200,
+      maxPrice: 4700,
+      modalPrice: 4450,
+      unit: 'Quintal',
+      arrivalDate: new Date().toISOString().split('T')[0],
+      trend: 'up',
+    },
+    {
+      id: `mock-5-${district}`,
+      commodity: 'Vegetables (Mix)',
+      market: `${district} Local Market`,
+      state: state,
+      district: district,
+      minPrice: 1500,
+      maxPrice: 2500,
+      modalPrice: 2000,
+      unit: 'Quintal',
+      arrivalDate: new Date().toISOString().split('T')[0],
+      trend: 'stable',
+    },
+  ];
+};
+
 export const MarketPriceScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [prices, setPrices] = useState<MarketItem[]>(MOCK_DATA);
   const [filterMode, setFilterMode] = useState<'all' | 'local'>('local');
   const [userLocation, setUserLocation] = useState<{ state?: string, district?: string } | null>(null);
+  const [processingVoice, setProcessingVoice] = useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
+  const [language, setLanguage] = useState('hi');
 
   useEffect(() => {
-    loadUserLocation();
-  }, [user]);
-
-  const loadUserLocation = async () => {
-    // 1. Try GPS
-    const gps = await LocationService.getCurrentLocation();
-    if (gps) {
-      const address = await LocationService.getReverseGeocode(gps.lat, gps.lon);
-      if (address.district) {
-        setUserLocation({ state: address.state || undefined, district: address.district });
-        return;
-      }
-    }
-
-    // 2. Fallback to Profile
     if (user) {
-      const profile = await ProfileService.getProfile(user.uid);
-      if (profile) {
-        setUserLocation({ state: profile.state, district: profile.district });
+      ProfileService.getProfile(user.uid).then(p => {
+        if (p?.language) setLanguage(p.language);
+      });
+    }
+    loadData();
+  }, [user, filterMode]);
+
+  const handleVoiceCommand = (text: string) => {
+    return processLocalCommand(text, {
+      navigation,
+      language,
+      isVoiceOutputEnabled,
+      onLogout: () => {
+         Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Logout', onPress: logout, style: 'destructive' }
+            ]
+        );
       }
+    });
+  };
+
+  const handleVoiceText = (text: string) => {
+    if (handleVoiceCommand(text)) return;
+    setSearch(text);
+    if (isVoiceOutputEnabled) {
+      SpeechService.speak(`Searching for ${text}`, { language: language === 'hi' ? 'hi-IN' : 'en-US' });
     }
   };
 
-  const onRefresh = () => {
+
+  const normalize = (str: string) => str?.trim().toLowerCase();
+
+  const resolveLocation = async () => {
+    try {
+      // 1. Web Geolocation
+      if (Platform.OS === 'web' && navigator.geolocation) {
+        try {
+          const position = await new Promise<any>((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+          });
+          const { latitude: lat, longitude: lon } = position.coords;
+          const address = await LocationService.getReverseGeocode(lat, lon);
+          if (address?.district) {
+            return { district: address.district, state: address.state || 'Unknown' };
+          }
+        } catch (e) {
+          console.log("Web geolocation failed, trying mobile/profile fallback");
+        }
+      }
+
+      // 2. Mobile GPS Fallback
+      const gps = await LocationService.getCurrentLocation();
+      if (gps) {
+        const address = await LocationService.getReverseGeocode(gps.lat, gps.lon);
+        if (address?.district) {
+          return { district: address.district, state: address.state || 'Unknown' };
+        }
+      }
+
+      // 3. Profile Fallback
+      if (user) {
+        const profile = await ProfileService.getProfile(user.uid);
+        if (profile?.district || profile?.location) {
+          return {
+            district: profile.district || profile.location || 'Nashik',
+            state: profile.state || 'Local'
+          };
+        }
+      }
+    } catch (err) {
+      console.log("Location resolution error:", err);
+    }
+
+    // 4. Final Hard Fallback
+    return { district: 'Nashik', state: 'Maharashtra' };
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      // Get location based on filter mode
+      let locationObj = { district: '', state: '' };
+      
+      if (filterMode === 'local') {
+        locationObj = await resolveLocation();
+        setUserLocation(locationObj);
+      }
+
+      console.log("Calling API with:", locationObj.district || "National");
+
+      // 2. Fetch real data
+      const crops = ['Wheat', 'Rice', 'Soyabean', 'Cotton', 'Onion'];
+      try {
+        const results = await Promise.all(crops.map(crop => getMarketPrices(crop, locationObj.district)));
+        
+        // Flatten nearby_mandis into the prices list
+        const apiPrices: MarketItem[] = [];
+        results.forEach((res, cropIndex) => {
+          if (res.nearby_mandis && res.nearby_mandis.length > 0) {
+            res.nearby_mandis.forEach((mandi: any, mandiIndex: number) => {
+              apiPrices.push({
+                id: `api-${cropIndex}-${mandiIndex}-${Date.now()}`,
+                commodity: res.crop || crops[cropIndex],
+                market: mandi.name || `${locationObj.district || 'Local'} Mandi`,
+                state: mandi.state || locationObj.state || 'Local',
+                district: mandi.district || locationObj.district || 'Local',
+                minPrice: parseInt(mandi.price) - 100,
+                maxPrice: parseInt(mandi.price) + 100,
+                modalPrice: parseInt(mandi.price),
+                unit: res.unit || 'Quintal',
+                arrivalDate: new Date().toISOString().split('T')[0],
+                trend: (res.trend as any) || 'stable',
+              });
+            });
+          }
+        });
+
+        if (apiPrices.length > 0) {
+          setPrices(apiPrices);
+        } else {
+          if (filterMode === 'local' && locationObj.district) {
+            setPrices(generateMockData(locationObj.district, locationObj.state || 'State'));
+          } else {
+            setPrices(MOCK_DATA);
+          }
+        }
+      } catch (err) {
+        console.error('Market Price fetch failed, using mock data', err);
+        if (filterMode === 'local' && locationObj.district) {
+            setPrices(generateMockData(locationObj.district, locationObj.state || 'State'));
+        } else {
+            setPrices(MOCK_DATA);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
     setRefreshing(true);
-    // Simulate API fetch
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
+    await loadData();
+    setRefreshing(false);
   };
 
   const filteredPrices = prices.filter(item => {
-    const matchesSearch = item.commodity.toLowerCase().includes(search.toLowerCase()) ||
-      item.market.toLowerCase().includes(search.toLowerCase());
+    const searchLower = search.toLowerCase();
+    const matchesSearch = 
+      item.commodity.toLowerCase().includes(searchLower) ||
+      item.market.toLowerCase().includes(searchLower) ||
+      (item.state && item.state.toLowerCase().includes(searchLower)) ||
+      (item.district && item.district.toLowerCase().includes(searchLower));
 
-    if (filterMode === 'local' && userLocation?.state) {
-      // Strict filter for district, loose for state
-      const matchesLoc = (userLocation.district && item.district === userLocation.district) ||
-        (item.state === userLocation.state);
+    if (filterMode === 'local' && userLocation?.district) {
+      const itemDistrict = item.district?.toLowerCase() || '';
+      const userDistrict = userLocation.district.toLowerCase();
+      const itemState = item.state?.toLowerCase() || '';
+      
+      const matchesLoc = itemDistrict.includes(userDistrict) || 
+                         userDistrict.includes(itemDistrict) ||
+                         itemState === 'local';
       return matchesSearch && matchesLoc;
     }
     return matchesSearch;
@@ -183,26 +389,6 @@ export const MarketPriceScreen: React.FC<{ navigation: any }> = ({ navigation })
         </View>
       </View>
 
-      {/* Filter Toggle */}
-      <View style={{ flexDirection: 'row', paddingHorizontal: 16, marginBottom: 10 }}>
-        <TouchableOpacity
-          style={[styles.filterBtn, filterMode === 'local' && styles.filterBtnActive]}
-          onPress={() => setFilterMode('local')}
-        >
-          <Text style={[styles.filterText, filterMode === 'local' && styles.filterTextActive]}>
-            Nearby ({userLocation?.district || "Local"})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterBtn, filterMode === 'all' && styles.filterBtnActive]}
-          onPress={() => setFilterMode('all')}
-        >
-          <Text style={[styles.filterText, filterMode === 'all' && styles.filterTextActive]}>
-            All Markets
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.cardFooter}>
         <Text style={styles.footerText}>Unit: {item.unit}</Text>
         <Text style={styles.footerText}>Updated: {item.arrivalDate}</Text>
@@ -213,10 +399,29 @@ export const MarketPriceScreen: React.FC<{ navigation: any }> = ({ navigation })
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Home');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Market Prices</Text>
+        <View style={{ flex: 1 }} />
+        <VoiceRecordButton 
+          onRecordingComplete={() => {}}
+          onSpeechEnd={handleVoiceText}
+          onSpeechPartial={() => {}}
+          onSpeechStart={() => {}}
+          isProcessing={processingVoice}
+          size={36}
+          language={language === 'hi' ? 'hi-IN' : 'en-US'}
+        />
       </View>
 
       <View style={styles.searchContainer}>
@@ -227,6 +432,26 @@ export const MarketPriceScreen: React.FC<{ navigation: any }> = ({ navigation })
           value={search}
           onChangeText={setSearch}
         />
+      </View>
+
+      {/* Global Filter Toggle */}
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterBtn, filterMode === 'local' && styles.active]}
+          onPress={() => setFilterMode('local')}
+        >
+          <Text style={[styles.filterText, filterMode === 'local' && styles.activeText]}>
+            Nearby ({userLocation?.district || 'Local'})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterBtn, filterMode === 'all' && styles.active]}
+          onPress={() => setFilterMode('all')}
+        >
+          <Text style={[styles.filterText, filterMode === 'all' && styles.activeText]}>
+            All Markets
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -388,6 +613,17 @@ const styles = StyleSheet.create({
   filterBtn: {
     paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20,
     backgroundColor: '#F0F0F0', marginRight: 10,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  active: {
+    backgroundColor: '#27AE60',
+  },
+  activeText: {
+    color: 'white',
   },
   filterBtnActive: {
     backgroundColor: '#27AE60',

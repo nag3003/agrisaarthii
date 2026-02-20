@@ -62,16 +62,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await Storage.saveUser({
             uid: activeUser.uid,
             email: activeUser.email || '',
+            displayName: activeUser.displayName || profile.name || '',
             role: profile.role,
           });
         } else {
-          setRole('farmer');
+          // Fallback to stored role or default to 'farmer'
+          const finalRole = (storedUser && storedUser.role) ? storedUser.role : 'farmer';
+          setRole(finalRole);
           setUser(activeUser);
-          await Storage.saveUser({
-            uid: activeUser.uid,
-            email: activeUser.email || '',
-            role: 'farmer',
-          });
+          
+          if (!storedUser || !storedUser.role) {
+            await Storage.saveUser({
+              uid: activeUser.uid,
+              email: activeUser.email || '',
+              displayName: activeUser.displayName || '',
+              role: 'farmer',
+            });
+          }
         }
       } catch (error: any) {
         console.error('AuthContext: Error refreshing session:', error);
@@ -94,7 +101,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Check if auth is a mock (fallback from firebase.ts error)
     // @ts-ignore
-    if (auth.name === 'mock-app' || auth.name === 'mock-error-app') {
+    if (auth.isMock) {
       console.warn("AuthContext: Running in safe mode with mock auth.");
       setLoading(false);
       return;
@@ -113,16 +120,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               role: profile.role,
             });
           } else {
-            setRole('farmer');
-            await Storage.saveUser({
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || '',
-              role: 'farmer',
-            });
+            // Fallback to stored role or default to 'farmer'
+            const storedUser = await Storage.getUser();
+            if (storedUser && storedUser.uid === firebaseUser.uid && storedUser.role) {
+              setRole(storedUser.role);
+            } else {
+              setRole('farmer'); // Default to farmer if no profile/stored role
+            }
           }
         } catch (error: any) {
           console.error('AuthContext: Error in auth state change:', error);
-          setRole('farmer');
+          setRole('farmer'); // Default on error to keep app usable
         }
       } else {
         // Only clear if not in demo mode
@@ -146,7 +154,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         return prev;
       });
-    }, 5000);
+    }, 15000);
 
     return () => {
       unsubscribe();

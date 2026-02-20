@@ -36,12 +36,20 @@ async def voice_query(
     }
 
 @router.post("/diagnosis")
-async def crop_diagnosis(image: UploadFile = File(...)):
+async def crop_diagnosis(
+    image: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
+    description: Optional[str] = Form(None)
+):
     """
     Analyze crop image for disease using AI Service
     """
+    if not image and not image_url:
+        raise HTTPException(status_code=400, detail="Either image or image_url must be provided")
+
     # Delegate to AI Service which uses the Intelligence module
-    result = await AIService.analyze_crop_image(image)
+    # Pass description to AI service if it's provided
+    result = await AIService.analyze_crop_image(image, image_url=image_url, description=description)
     
     # Add audio explanation URL (mocked for now as per service logic)
     result["audio_explanation"] = await AIService.generate_audio_response(result.get("remedy", "No remedy available"))

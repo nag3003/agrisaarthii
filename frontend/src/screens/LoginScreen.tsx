@@ -14,24 +14,27 @@ import {
   Dimensions,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 // Add hook import
 import { AuthService, useGoogleAuth, useAppleAuth } from '../services/auth';
+import { auth } from '../services/firebase';
 import { ProfileService, UserProfile } from '../services/profile';
 import { Ionicons } from '@expo/vector-icons';
-
-const { width } = Dimensions.get('window');
 
 import { Storage } from '../services/storage';
 
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
+import { Logo } from '../components/Logo';
 
 export const LoginScreen: React.FC = () => {
+  const { width } = useWindowDimensions();
   const { refreshSession } = useAuth();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
+  const [showMockLoginModal, setShowMockLoginModal] = useState(false);
   const { signInWithGoogle } = useGoogleAuth();
   const { signInWithApple } = useAppleAuth(); // New Hook
 
@@ -44,6 +47,14 @@ export const LoginScreen: React.FC = () => {
     }
 
     try {
+      if ((auth as any).isMock) {
+        Alert.alert(
+          "Safe Mode",
+          "Apple Sign-In is unavailable in Safe Mode (missing Firebase keys).\n\nPlease use the 'Login as Demo User' button.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
       setLoading(true);
       showToast('Connecting to Apple...', 'info');
       const { user, fullName } = await signInWithApple();
@@ -260,7 +271,7 @@ export const LoginScreen: React.FC = () => {
               email: result.user.email || trimmedEmail,
               role: userRole
             });
-            showToast('Welcome back to AgriSaarthi!', 'success');
+            showToast('Welcome back to Agri!', 'success');
             await refreshSession();
           } catch (profileErr: any) {
             await Storage.saveUser({
@@ -333,6 +344,12 @@ export const LoginScreen: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     try {
+      // Check for Mock Mode
+      if ((auth as any).isMock) {
+        setShowMockLoginModal(true);
+        return;
+      }
+
       setLoading(true);
       showToast('Connecting to Google...', 'info');
       const user = await signInWithGoogle();
@@ -388,13 +405,122 @@ export const LoginScreen: React.FC = () => {
 
 
 
+  const handleMockGoogleLogin = async (mockEmail: string, role: string) => {
+    try {
+      setShowMockLoginModal(false);
+      setLoading(true);
+      showToast('Connecting to Google (Mock)...', 'info');
+      
+      const mockUser = {
+        uid: 'mock-google-' + mockEmail.split('@')[0],
+        email: mockEmail,
+        displayName: mockEmail.split('@')[0].charAt(0).toUpperCase() + mockEmail.split('@')[0].slice(1) + ' User',
+        emailVerified: true,
+        photoURL: null,
+      };
+
+      await Storage.saveUser({
+        uid: mockUser.uid,
+        email: mockUser.email,
+        displayName: mockUser.displayName,
+        role: role
+      });
+      
+      // Also update profile service metadata if possible
+      try {
+        await ProfileService.saveProfile({
+          uid: mockUser.uid,
+          name: mockUser.displayName,
+          email: mockUser.email,
+          role: role as any,
+          language: 'en',
+          location: 'Mock Location',
+          createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn('Mock profile save failed', e);
+      }
+
+      showToast(`Welcome, ${mockUser.displayName}!`, 'success');
+      await refreshSession();
+    } catch (e) {
+      console.error(e);
+      showToast('Mock Login Failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
+      {/* Mock Login Modal */}
+      {showMockLoginModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Choose an Account</Text>
+            <Text style={styles.modalSubtitle}>to continue to AgriSarathi</Text>
+            
+            <TouchableOpacity 
+              style={styles.accountOption}
+              onPress={() => handleMockGoogleLogin('farmer.test@agri.com', 'farmer')}
+            >
+              <View style={[styles.avatarCircle, { backgroundColor: '#27AE60' }]}>
+                <Text style={styles.avatarText}>F</Text>
+              </View>
+              <View>
+                <Text style={styles.accountName}>Farmer User</Text>
+                <Text style={styles.accountEmail}>farmer.test@agri.com</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.accountOption}
+              onPress={() => handleMockGoogleLogin('worker.test@agri.com', 'worker')}
+            >
+              <View style={[styles.avatarCircle, { backgroundColor: '#F39C12' }]}>
+                <Text style={styles.avatarText}>W</Text>
+              </View>
+              <View>
+                <Text style={styles.accountName}>Worker User</Text>
+                <Text style={styles.accountEmail}>worker.test@agri.com</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.accountOption}
+              onPress={() => handleMockGoogleLogin('landowner.test@agri.com', 'landowner')}
+            >
+              <View style={[styles.avatarCircle, { backgroundColor: '#8E44AD' }]}>
+                <Text style={styles.avatarText}>L</Text>
+              </View>
+              <View>
+                <Text style={styles.accountName}>Landowner User</Text>
+                <Text style={styles.accountEmail}>landowner.test@agri.com</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.closeModalBtn}
+              onPress={() => setShowMockLoginModal(false)}
+            >
+              <Text style={styles.closeModalText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* Animated Green Background Glows */}
       <Animated.View
         style={[
           styles.glow,
           styles.glow1,
+          {
+            width: width * 1.5,
+            height: width * 1.5,
+            borderRadius: (width * 1.5) / 2,
+            top: -width * 0.5,
+            right: -width * 0.5,
+          },
           {
             transform: [
               { scale: animValue1.interpolate({ inputRange: [0, 1], outputRange: [1, 1.4] }) },
@@ -409,6 +535,13 @@ export const LoginScreen: React.FC = () => {
         style={[
           styles.glow,
           styles.glow2,
+          {
+            width: width * 1.5,
+            height: width * 1.5,
+            borderRadius: (width * 1.5) / 2,
+            bottom: -width * 0.2,
+            left: -width * 0.5,
+          },
           {
             transform: [
               { scale: animValue2.interpolate({ inputRange: [0, 1], outputRange: [1, 1.2] }) },
@@ -443,6 +576,7 @@ export const LoginScreen: React.FC = () => {
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
+          enabled={Platform.OS !== 'web'}
         >
           <ScrollView contentContainerStyle={styles.scrollContent} bounces={false}>
             <Animated.View
@@ -458,10 +592,7 @@ export const LoginScreen: React.FC = () => {
             >
               {/* Logo Area */}
               <View style={styles.logoContainer}>
-                <View style={styles.logoCircle}>
-                  <Ionicons name="leaf" size={32} color="#27AE60" />
-                </View>
-                <Text style={styles.brandName}>AgriSaarthi</Text>
+                <Logo iconSize={40} textStyle={{ fontSize: 32 }} />
               </View>
 
               {/* Tabs */}
@@ -748,22 +879,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5FDF9',
+    overflow: 'hidden', // Ensure background elements don't cause scrollbars
   },
   glow: {
     position: 'absolute',
-    width: width * 1.5,
-    height: width * 1.5,
-    borderRadius: (width * 1.5) / 2,
     opacity: 0.2,
   },
   glow1: {
-    top: -width * 0.5,
-    right: -width * 0.5,
     backgroundColor: '#E8F5E9',
   },
   glow2: {
-    bottom: -width * 0.2,
-    left: -width * 0.5,
     backgroundColor: '#C8E6C9',
   },
   scrollContent: {
@@ -942,8 +1067,24 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  demoBtn: {
+    flexDirection: 'row',
+    height: 56,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 2,
+    borderColor: '#27AE60',
+    borderStyle: 'dashed',
+  },
+  demoBtnText: {
+    color: '#27AE60',
+    fontSize: 16,
+    fontWeight: '600',
   },
   dividerContainer: {
     flexDirection: 'row',
@@ -995,22 +1136,6 @@ const styles = StyleSheet.create({
     marginTop: 20,
     lineHeight: 18,
   },
-  demoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 15,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(39, 174, 96, 0.2)',
-    backgroundColor: 'rgba(39, 174, 96, 0.05)',
-  },
-  demoBtnText: {
-    color: '#27AE60',
-    fontSize: 14,
-    fontWeight: '600',
-  },
   apiErrorContainer: {
     backgroundColor: '#F0F9F4',
     padding: 16,
@@ -1045,5 +1170,101 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  safeModeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    padding: 12,
+    marginHorizontal: 24,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  safeModeText: {
+    color: '#E65100',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    zIndex: 1000,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  accountOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#F9FAFB',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  avatarText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  accountName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  accountEmail: {
+    fontSize: 12,
+    color: '#666',
+  },
+  closeModalBtn: {
+    marginTop: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  closeModalText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 16,
   },
 });

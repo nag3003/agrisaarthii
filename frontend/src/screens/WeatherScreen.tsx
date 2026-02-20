@@ -7,21 +7,64 @@ import {
     TouchableOpacity,
     ScrollView,
     ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getWeather } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { LocationService } from '../services/location';
 import { ProfileService } from '../services/profile';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 export const WeatherScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
     const [weather, setWeather] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [processingVoice, setProcessingVoice] = useState(false);
+    const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
+    const [language, setLanguage] = useState('hi');
 
     useEffect(() => {
         loadWeather();
-    }, []);
+        if (user) {
+          ProfileService.getProfile(user.uid).then(p => {
+            if (p?.language) setLanguage(p.language);
+          });
+        }
+    }, [user]);
+
+    const handleVoiceCommand = (text: string) => {
+      return processLocalCommand(text, {
+        navigation,
+        language,
+        isVoiceOutputEnabled,
+        onLogout: () => {
+           Alert.alert(
+              'Logout',
+              'Are you sure you want to logout?',
+              [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Logout', onPress: logout, style: 'destructive' }
+              ]
+          );
+        }
+      });
+    };
+  
+    const handleVoiceText = (text: string) => {
+      if (handleVoiceCommand(text)) return;
+      
+      // Weather specific commands
+      if (text.toLowerCase().includes("temperature") || text.toLowerCase().includes("forecast")) {
+         if (weather && isVoiceOutputEnabled) {
+            SpeechService.speak(`The current temperature is ${weather.temp_c} degrees Celsius with ${weather.condition}`, { 
+              language: language === 'hi' ? 'hi-IN' : 'en-US' 
+            });
+         }
+      }
+    };
 
     const loadWeather = async () => {
         try {
@@ -77,10 +120,29 @@ export const WeatherScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         <SafeAreaView style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+                <TouchableOpacity 
+                    onPress={() => {
+                        if (navigation.canGoBack()) {
+                            navigation.goBack();
+                        } else {
+                            navigation.navigate('Home');
+                        }
+                    }} 
+                    style={styles.backBtn}
+                >
                     <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Weather Forecast</Text>
+                <View style={{ flex: 1 }} />
+                <VoiceRecordButton 
+                  onRecordingComplete={() => {}}
+                  onSpeechEnd={handleVoiceText}
+                  onSpeechPartial={() => {}}
+                  onSpeechStart={() => {}}
+                  isProcessing={processingVoice}
+                  size={36}
+                  language={language === 'hi' ? 'hi-IN' : 'en-US'}
+                />
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>

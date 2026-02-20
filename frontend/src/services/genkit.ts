@@ -14,7 +14,7 @@ export const ai = genkit({
 });
 
 /**
- * AgriSaarthi AI Assistant Helper
+ * Agri AI Assistant Helper
  * This can be used for local AI tasks if needed, 
  * though primary AI logic remains in the Python backend.
  */

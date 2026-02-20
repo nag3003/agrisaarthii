@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Query
 from app.services import speech_service, advice_service, weather_service, iot_service, feedback_service, knowledge_service, predictive_service, fallback_service
 from app.services.offline import sync
 
-from app.api.routes import (
+from . import (
     auth,
     market,
     profile,
@@ -28,14 +28,6 @@ router.include_router(logs.router, prefix="/logs", tags=["Logs"])
 router.include_router(query.router, prefix="/query", tags=["Query"])
 
 
-
-@router.post("/query/advice")
-async def advice(request: dict):
-    # In production, this would extract text and rich context
-    text = request.get("text", "")
-    context = request.get("context", {})
-    advice_data = await advice_service.AdvisoryReasoningEngine.get_actionable_advice(text, context)
-    return {"advice": advice_data}
 
 @router.get("/alerts/predictive")
 async def get_alerts(farmer_id: str = "f-123"):

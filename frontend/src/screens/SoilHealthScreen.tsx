@@ -7,18 +7,112 @@ import {
     TouchableOpacity,
     ScrollView,
     ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { getSensors, controlMotor } from '../services/api';
+import { getSensors, controlMotor, sendVoice, getAdvice } from '../services/api';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { useToast } from '../components/Toast';
+import { SpeechService } from '../services/speech';
+import { useAuth } from '../context/AuthContext';
+import { ProfileService, UserProfile } from '../services/profile';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
 
 export const SoilHealthScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+    const { user, logout } = useAuth();
+    const [farmer, setFarmer] = useState<UserProfile | null>(null);
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [toggling, setToggling] = useState(false);
+    const [processingVoice, setProcessingVoice] = useState(false);
+    const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
+    const [listeningText, setListeningText] = useState('');
+    const { showToast } = useToast();
 
     useEffect(() => {
         loadData();
-    }, []);
+        if (user) {
+            ProfileService.getProfile(user.uid).then(profile => {
+                if (profile) setFarmer(profile);
+            });
+        }
+    }, [user]);
+
+    const processQuery = async (text: string) => {
+        showToast(`Searching for: ${text}`, 'info');
+        
+        const adviceRes = await getAdvice(text, {
+            crop: farmer?.primaryCrop,
+            landSize: farmer?.landSize,
+            irrigation: farmer?.irrigationType,
+            context: 'soil_health',
+            sensorData: data
+        });
+
+        if (adviceRes && adviceRes.advice) {
+            if (isVoiceOutputEnabled && adviceRes.advice.advice) {
+                SpeechService.speak(adviceRes.advice.advice, {
+                    language: farmer?.language || 'hi'
+                });
+            }
+            showToast(adviceRes.advice.advice.substring(0, 50) + "...", 'success');
+        }
+    };
+
+    const handleVoiceCommand = (text: string): boolean => {
+        return processLocalCommand(text, {
+            navigation,
+            language: farmer?.language || 'hi',
+            isVoiceOutputEnabled,
+            onLogout: () => {
+                Alert.alert(
+                    'Logout',
+                    'Are you sure you want to logout?',
+                    [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Logout', onPress: logout, style: 'destructive' }
+                    ]
+                );
+            }
+        });
+    };
+
+    const handleVoiceQuery = async (uri: string) => {
+        // Prime speech service immediately on user gesture
+        if (isVoiceOutputEnabled) {
+            SpeechService.speak("", { volume: 0 });
+        }
+
+        setProcessingVoice(true);
+        try {
+            const response = await sendVoice(uri);
+            if (response && response.text) {
+                if (handleVoiceCommand(response.text)) return;
+                await processQuery(response.text);
+            }
+        } catch (e) {
+            console.error("Voice query failed", e);
+        } finally {
+            setProcessingVoice(false);
+        }
+    };
+
+    const handleVoiceText = async (text: string) => {
+        // Prime speech service immediately
+        if (isVoiceOutputEnabled) {
+            SpeechService.speak("", { volume: 0 });
+        }
+
+        setProcessingVoice(true);
+        try {
+            if (handleVoiceCommand(text)) return;
+            await processQuery(text);
+        } catch (e) {
+            console.error("Voice text failed", e);
+        } finally {
+            setProcessingVoice(false);
+        }
+    };
 
     const loadData = async () => {
         try {
@@ -67,7 +161,42 @@ export const SoilHealthScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                     <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Soil Health & IoT</Text>
+                <View style={{ flex: 1 }} />
+                <TouchableOpacity 
+                    style={[styles.voiceToggle, isVoiceOutputEnabled && styles.voiceToggleActive]} 
+                    onPress={() => {
+                        const newState = !isVoiceOutputEnabled;
+                        setIsVoiceOutputEnabled(newState);
+                        if (newState) {
+                            SpeechService.speak("Voice output enabled", { language: 'en-US' });
+                        } else {
+                            SpeechService.stop();
+                        }
+                    }}
+                >
+                    <Ionicons 
+                        name={isVoiceOutputEnabled ? "volume-high" : "volume-mute"} 
+                        size={22} 
+                        color={isVoiceOutputEnabled ? "#27AE60" : "#666"} 
+                    />
+                </TouchableOpacity>
+                <VoiceRecordButton 
+                    onRecordingComplete={handleVoiceQuery}
+                    onSpeechEnd={handleVoiceText}
+                    onSpeechPartial={(text) => setListeningText(text)}
+                    onSpeechStart={() => setListeningText('')}
+                    isProcessing={processingVoice}
+                    size={40}
+                    language={farmer?.language === 'hi' ? 'hi-IN' : 'en-US'}
+                />
             </View>
+            {listeningText ? (
+                <View style={{ backgroundColor: 'white', padding: 8, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+                    <Text style={{ fontSize: 14, color: '#333', textAlign: 'center' }}>
+                        {listeningText}
+                    </Text>
+                </View>
+            ) : null}
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 {/* Moisture Card */}
@@ -169,7 +298,24 @@ const styles = StyleSheet.create({
         zIndex: 10,
     },
     backBtn: { padding: 4 },
-    headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginLeft: 16 },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1A1A1A',
+        marginLeft: 16,
+    },
+    voiceToggle: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F0F0F0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
+    },
+    voiceToggleActive: {
+        backgroundColor: '#E8F5E9',
+    },
     scrollContent: { padding: 16 },
 
     mainCard: {

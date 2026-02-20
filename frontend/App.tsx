@@ -1,10 +1,12 @@
+// SUCCESSFUL RESTORATION TEST
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, Linking, Alert, Text, TouchableOpacity, Platform } from 'react-native';
-import NetInfo from '@react-native-community/netinfo';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import NetInfo from '@react-native-community/netinfo';
+import { View, Text, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import * as Linking from 'expo-linking';
 import { logger } from './src/utils/logger';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 
@@ -29,39 +31,47 @@ import { MarketPriceScreen } from './src/screens/MarketPriceScreen';
 import { WeatherScreen } from './src/screens/WeatherScreen';
 import { SoilHealthScreen } from './src/screens/SoilHealthScreen';
 import { CropDoctorScreen } from './src/screens/CropDoctorScreen';
+import { AgriJobsScreen } from './src/screens/AgriJobsScreen';
+import { VideosScreen } from './src/screens/VideosScreen';
 
 const Stack = createNativeStackNavigator();
 export const navigationRef = createNavigationContainerRef();
 
-// --- Auth Stack ---
-const AuthStack = () => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
+const AuthStack = ({ initialRoute = 'Login' as any }) => (
+  <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRoute}>
     <Stack.Screen name="Login" component={LoginScreen} />
     <Stack.Screen name="Onboarding" component={OnboardingScreen} />
   </Stack.Navigator>
 );
 
-// --- App Stack ---
-const AppStack = ({ role }: { role: string }) => (
-  <Stack.Navigator screenOptions={{ headerShown: false }}>
-    {role === 'worker' ? (
-      <Stack.Screen name="WorkerHome" component={WorkerHome} />
-    ) : role === 'landowner' ? (
-      <Stack.Screen name="LandownerHome" component={LandownerHome} />
-    ) : (
+const AppStack = ({ role }) => {
+  let initialRouteName = 'Home';
+
+  if (role === 'worker') {
+    initialRouteName = 'WorkerHome';
+  } else if (role === 'landowner') {
+    initialRouteName = 'LandownerHome';
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
       <Stack.Screen name="Home" component={HomeScreen} />
-    )}
-    <Stack.Screen name="Profile" component={ProfileScreen} />
-    <Stack.Screen name="Calculator" component={CalculatorScreen} />
-    <Stack.Screen name="Calendar" component={CalendarTodoScreen} />
-    <Stack.Screen name="GovSchemes" component={GovSchemesScreen} />
-    <Stack.Screen name="Machinery" component={MachineryScreen} />
-    <Stack.Screen name="MarketPrice" component={MarketPriceScreen} />
-    <Stack.Screen name="Weather" component={WeatherScreen} />
-    <Stack.Screen name="SoilHealth" component={SoilHealthScreen} />
-    <Stack.Screen name="CropDoctor" component={CropDoctorScreen} />
-  </Stack.Navigator>
-);
+      <Stack.Screen name="WorkerHome" component={WorkerHome} />
+      <Stack.Screen name="LandownerHome" component={LandownerHome} />
+      <Stack.Screen name="Profile" component={ProfileScreen} />
+      <Stack.Screen name="Calculator" component={CalculatorScreen} />
+      <Stack.Screen name="CalendarTodo" component={CalendarTodoScreen} />
+      <Stack.Screen name="GovSchemes" component={GovSchemesScreen} />
+      <Stack.Screen name="Machinery" component={MachineryScreen} />
+      <Stack.Screen name="MarketPrice" component={MarketPriceScreen} />
+      <Stack.Screen name="Weather" component={WeatherScreen} />
+      <Stack.Screen name="SoilHealth" component={SoilHealthScreen} />
+      <Stack.Screen name="CropDoctor" component={CropDoctorScreen} />
+      <Stack.Screen name="AgriJobs" component={AgriJobsScreen} />
+      <Stack.Screen name="Videos" component={VideosScreen} />
+    </Stack.Navigator>
+  );
+};
 
 function Main() {
   const { user, role, loading } = useAuth();
@@ -85,7 +95,7 @@ function Main() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FDF9' }}>
-        <Text style={{ marginTop: 20 }}>Loading AgriSaarthi...</Text>
+        <Text style={{ marginTop: 20 }}>Loading Agri...</Text>
         <ActivityIndicator size="large" color="#27AE60" />
       </View>
     );
@@ -109,25 +119,28 @@ function Main() {
       <NavigationContainer
         ref={navigationRef}
         linking={{
-          prefixes: ['https://nag3003.github.io/agrisaarthii', 'agrisarathi://'],
+          prefixes: [
+            Linking.createURL('/'),
+            'https://nag3003.github.io/agrisaarthii',
+          ],
           config: {
             screens: {
-              Login: '',
               Onboarding: 'onboarding',
+              Login: 'login',
               Home: 'home',
               WorkerHome: 'worker-home',
               LandownerHome: 'landowner-home',
               Profile: 'profile',
               Calculator: 'calculator',
-              Calendar: 'calendar',
-              GovSchemes: 'schemes',
+              CalendarTodo: 'calendar-todo',
+              GovSchemes: 'gov-schemes',
               Machinery: 'machinery',
               MarketPrice: 'market-price',
               Weather: 'weather',
               SoilHealth: 'soil-health',
               CropDoctor: 'crop-doctor',
-            },
-          },
+            }
+          }
         }}
         fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
       >
@@ -135,7 +148,7 @@ function Main() {
         {user ? (
           <AppStack role={role || 'farmer'} />
         ) : (
-          <AuthStack />
+          <AuthStack key="login-stack" initialRoute="Login" />
         )}
       </NavigationContainer>
     </SafeAreaProvider>
@@ -145,13 +158,13 @@ function Main() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <View style={{ flex: 1 }}>
+      <SafeAreaProvider>
         <AuthProvider>
           <ToastProvider>
             <Main />
           </ToastProvider>
         </AuthProvider>
-      </View>
+      </SafeAreaProvider>
     </ErrorBoundary>
   );
 }

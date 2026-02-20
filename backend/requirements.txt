@@ -14,3 +14,16 @@ librosa
 soundfile
 numpy
 firebase-admin
+google-genai
+pyaudio
+opencv-python
+python-dotenv
+pyttsx3
+SpeechRecognition
+pywhatkit
+wikipedia
+pyjokes
+Pillow
+groq
+pydub
+static-ffmpeg

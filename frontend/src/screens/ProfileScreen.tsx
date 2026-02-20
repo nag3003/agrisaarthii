@@ -17,20 +17,23 @@ import {
 import { INDIAN_STATES, POPULAR_DISTRICTS } from '../constants/locations';
 import { logger } from '../utils/logger';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { ImagePickerService } from '../services/imagePicker';
+// import * as ImagePicker from 'expo-image-picker';
 import { AuthService } from '../services/auth';
 import { ProfileService, UserProfile } from '../services/profile';
 import { Storage } from '../services/storage';
 import { useAuth } from '../context/AuthContext';
+import { VoiceRecordButton } from '../components/VoiceRecordButton';
+import { processLocalCommand } from '../utils/voiceCommandHelper';
+import { SpeechService } from '../services/speech';
 
 export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const { user, refreshSession, logout } = useAuth(); // Added logout here
+  const { user, refreshSession, logout, role } = useAuth(); // Added logout here
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
 
   // Editable fields
   const [editedName, setEditedName] = useState('');
@@ -47,12 +50,14 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
 
   // New Enhancements
   const [profileCompletion, setProfileCompletion] = useState(0);
+  const [processingVoice, setProcessingVoice] = useState(false);
+  const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
 
-  useEffect(() => {
-    loadProfile();
-  }, [user]);
+   useEffect(() => {
+     loadProfile();
+   }, [user]);
 
-  const loadProfile = async () => {
+    const loadProfile = async () => {
     try {
       if (!user) return;
       setLoading(true);
@@ -114,81 +119,79 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     return () => { mounted.current = false; };
   }, []);
 
-  const handleExportLogs = () => {
-    const logs = logger.exportLogs();
-    if (Platform.OS === 'web') {
-      const blob = new Blob([logs], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `agrisarathi_logs_${new Date().getTime()}.txt`;
-      a.click();
-    } else {
-      Alert.alert('Logs', logs.substring(0, 500) + '...');
-    }
-  };
-
   const handlePickImage = async () => {
     if (!profile) return;
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const { status } = await ImagePickerService.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission Denied', 'We need permission to access your gallery.');
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    const result = await ImagePickerService.launchImageLibraryAsync({
+      mediaTypes: ImagePickerService.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.5,
     });
 
     if (!result.canceled && result.assets[0].uri) {
-      setSaving(true);
-      const res = await ProfileService.uploadProfilePicture(profile.uid, result.assets[0].uri);
-      if (res.success) {
-        const updatedProfile = { ...profile, photoURL: res.url };
-        setProfile(updatedProfile);
-        await refreshSession();
-        Alert.alert('Success', 'Profile picture updated!');
-      } else {
-        Alert.alert('Error', 'Failed to upload image.');
+      try {
+        setSaving(true);
+        const res = await ProfileService.uploadProfilePicture(profile.uid, result.assets[0].uri);
+        if (res.success) {
+          const updatedProfile = { ...profile, photoURL: res.url };
+          setProfile(updatedProfile);
+          await refreshSession();
+          Alert.alert('Success', 'Profile picture updated!');
+        } else {
+          Alert.alert('Error', res.error || 'Failed to upload image.');
+        }
+      } catch (error: any) {
+        logger.error('Profile', 'HandlePickImage failed', { error: error.message });
+        Alert.alert('Error', 'An unexpected error occurred during upload.');
+      } finally {
+        if (mounted.current) setSaving(false);
       }
-      setSaving(false);
     }
   };
 
   const handleSave = async () => {
     if (!profile) return;
-    setSaving(true);
+    try {
+      setSaving(true);
 
-    // Validate irrigation type
-    const validIrrigationTypes = ['Borewell', 'Canal', 'Rainfed'];
-    const irrigationType = validIrrigationTypes.includes(editedIrrigation)
-      ? (editedIrrigation as 'Borewell' | 'Canal' | 'Rainfed')
-      : profile.irrigationType;
+      // Validate irrigation type
+      const validIrrigationTypes = ['Borewell', 'Canal', 'Rainfed'];
+      const irrigationType = validIrrigationTypes.includes(editedIrrigation)
+        ? (editedIrrigation as 'Borewell' | 'Canal' | 'Rainfed')
+        : profile.irrigationType;
 
-    const updatedProfile: UserProfile = {
-      ...profile,
-      name: editedName,
-      location: `${editedDistrict}, ${editedState}`, // Legacy compatibility
-      state: editedState,
-      district: editedDistrict,
-      primaryCrop: editedPrimaryCrop,
-      landSize: editedLandSize ? parseFloat(editedLandSize) : 0,
-      irrigationType: irrigationType,
-    };
+      const updatedProfile: UserProfile = {
+        ...profile,
+        name: editedName,
+        location: `${editedDistrict}, ${editedState}`, // Legacy compatibility
+        state: editedState,
+        district: editedDistrict,
+        primaryCrop: editedPrimaryCrop,
+        landSize: editedLandSize ? parseFloat(editedLandSize) : 0,
+        irrigationType: irrigationType,
+      };
 
-    const res = await ProfileService.saveProfile(updatedProfile);
-    if (res.success) {
-      setProfile(updatedProfile);
-      await refreshSession();
-      setIsEditing(false);
-      Alert.alert('Success', 'Profile updated!');
-    } else {
-      Alert.alert('Error', 'Failed to update profile.');
+      const res = await ProfileService.saveProfile(updatedProfile);
+      if (res.success) {
+        setProfile(updatedProfile);
+        await refreshSession();
+        setIsEditing(false);
+        Alert.alert('Success', 'Profile updated!');
+      } else {
+        Alert.alert('Error', res.error || 'Failed to update profile.');
+      }
+    } catch (error: any) {
+      logger.error('Profile', 'HandleSave failed', { error: error.message });
+      Alert.alert('Error', 'An unexpected error occurred while saving.');
+    } finally {
+      if (mounted.current) setSaving(false);
     }
-    setSaving(false);
   };
 
   if (loading) {
@@ -199,13 +202,57 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     );
   }
 
+  const handleVoiceCommand = (text: string) => {
+    return processLocalCommand(text, {
+      navigation,
+      language: profile?.language || 'hi',
+      isVoiceOutputEnabled,
+      onLogout: () => setShowLogoutModal(true)
+    });
+  };
+
+  const handleVoiceText = (text: string) => {
+    if (handleVoiceCommand(text)) return;
+    
+    // Profile specific commands
+    if (text.toLowerCase().includes("edit") || text.toLowerCase().includes("change")) {
+       setIsEditing(true);
+       if (isVoiceOutputEnabled) {
+          SpeechService.speak("Editing profile enabled", { 
+            language: profile?.language === 'hi' ? 'hi-IN' : 'en-US' 
+          });
+       }
+    } else if (text.toLowerCase().includes("save") || text.toLowerCase().includes("update")) {
+        handleSave();
+     }
+   };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Home');
+            }
+          }} 
+          style={styles.backBtn}
+        >
           <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Profile</Text>
+        <View style={{ flex: 1 }} />
+        <VoiceRecordButton 
+          onRecordingComplete={() => {}}
+          onSpeechEnd={handleVoiceText}
+          onSpeechPartial={() => {}}
+          onSpeechStart={() => {}}
+          isProcessing={processingVoice}
+          size={36}
+          language={profile?.language === 'hi' ? 'hi-IN' : 'en-US'}
+        />
         <TouchableOpacity onPress={handleLogout} style={styles.logoutBtn}>
           <Ionicons name="log-out-outline" size={24} color="#FF6B6B" />
         </TouchableOpacity>
@@ -426,37 +473,6 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
         <TouchableOpacity style={styles.dangerZoneBtn} onPress={handleLogout}>
           <Text style={styles.dangerZoneText}>Logout from Account</Text>
         </TouchableOpacity>
-
-        {/* Developer Logs (Hidden/Optional) */}
-        <TouchableOpacity
-          style={[styles.dangerZoneBtn, { marginTop: 10, backgroundColor: '#F0F0F0', borderColor: '#666' }]}
-          onPress={() => setShowLogs(!showLogs)}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <Ionicons name="bug-outline" size={20} color="#666" style={{ marginRight: 8 }} />
-            <Text style={[styles.dangerZoneText, { color: '#666' }]}>
-              {showLogs ? 'Hide Logs' : 'View System Logs'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {showLogs && (
-          <View style={styles.logsContainer}>
-            <View style={styles.logsHeader}>
-              <Text style={styles.logsTitle}>System Logs</Text>
-              <TouchableOpacity onPress={handleExportLogs}>
-                <Text style={styles.exportText}>Export</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.logsList}>
-              {logger.getRecentLogs().map((log, i) => (
-                <Text key={i} style={[styles.logItem, { color: log.level === 'ERROR' ? '#FF6B6B' : '#666' }]}>
-                  {`[${log.level}] [${log.module}] ${log.message}`}
-                </Text>
-              ))}
-            </ScrollView>
-          </View>
-        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>

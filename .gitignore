@@ -5,9 +5,16 @@ backend/.venv/
 __pycache__/
 *.pyc
 
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
 # Env
 .env
 .env.*
+.env.local
 
 # OS
 .DS_Store
@@ -20,3 +27,12 @@ __pycache__/
 frontend/dist/
 frontend/web-build/
 frontend/.expo/
+frontend/.expo_home/
+frontend/.npm/
+
+# Firebase
+.firebase/
+google-services.json
+
+# Temporary
+backend/dummy.txt

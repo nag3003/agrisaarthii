@@ -2,7 +2,7 @@ import { collection, addDoc } from "firebase/firestore/lite";
 import { db } from "./firebase";
 
 /**
- * AgriSaarthi Email Service
+ * Agri Email Service
  * Uses the Firebase 'Trigger Email' extension pattern.
  * Adding a document to the 'mail' collection triggers an email.
  */
@@ -28,5 +28,5 @@ export const sendEmail = async (to: string, subject: string, htmlBody: string) =
 
 /**
  * Example Usage:
- * sendEmail('farmer@example.com', 'AgriSaarthi Alert', '<h1>Crop Health Alert</h1><p>Action required for your Tomato crop.</p>');
+ * sendEmail('farmer@example.com', 'Agri Alert', '<h1>Crop Health Alert</h1><p>Action required for your Tomato crop.</p>');
  */
