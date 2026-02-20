@@ -15,6 +15,7 @@
             "**/*"
         ],
         "experiments": {
+            "baseUrl": "/agrisaarthii"
         },
         "ios": {
             "supportsTablet": true,
