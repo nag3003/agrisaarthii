@@ -177,20 +177,20 @@ function Main() {
           <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
       Route: {currentRouteName}
     </Text>
-    <Text style={{ color: 'cyan', fontSize: 10, fontFamily: 'monospace' }}>
-      Linking: CACHE BUST (v3.5)
+    <Text style={{ color: 'magenta', fontSize: 10, fontFamily: 'monospace' }}>
+      Linking: DISABLED (v3.6)
     </Text>
   </View>
 )}
       <NavigationContainer
-        ref={navigationRef}
-        linking={linking} // RESTORED
-        fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
-        onStateChange={() => {
-          const route = navigationRef.getCurrentRoute();
-          setCurrentRouteName(route?.name || 'Unknown');
-        }}
-      >
+          ref={navigationRef}
+          // linking={linking} // DISABLED: Forcing default behavior to fix GitHub Pages
+          fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
+          onStateChange={() => {
+            const route = navigationRef.getCurrentRoute();
+            setCurrentRouteName(route?.name || 'Unknown');
+          }}
+        >
         <StatusBar style="light" />
         {user ? (
           <AppStack role={role || 'farmer'} />
