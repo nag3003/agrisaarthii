@@ -73,10 +73,45 @@ const AppStack = ({ role }) => {
   );
 };
 
+const linking = {
+  prefixes: [
+    'https://nag3003.github.io/agrisaarthii',
+    Linking.createURL('/'), // Localhost fallback
+  ],
+  config: {
+    screens: {
+      Login: {
+        path: '',
+        exact: false
+      },
+      Onboarding: 'onboarding',
+      Home: 'home',
+      WorkerHome: 'worker-home',
+      LandownerHome: 'landowner-home',
+      Profile: 'profile',
+      Calculator: 'calculator',
+      CalendarTodo: 'calendar',
+      GovSchemes: 'schemes',
+      Machinery: 'machinery',
+      MarketPrice: 'market-price',
+      Weather: 'weather',
+      SoilHealth: 'soil-health',
+      CropDoctor: 'crop-doctor',
+      AgriJobs: 'jobs',
+      Videos: 'videos',
+    },
+  },
+};
+
 function Main() {
   const { user, role, loading } = useAuth();
   // FORCE ONLINE TRUE for Web Debugging
   const [isOnline, setIsOnline] = useState(true);
+
+  // DEBUG OVERLAY
+  if (Platform.OS === 'web') {
+    // console.log('Current URL:', window.location.href);
+  }
 
   useEffect(() => {
     // FORCE ONLINE ON WEB to avoid false offline detection
@@ -116,34 +151,32 @@ function Main() {
 
   return (
     <SafeAreaProvider style={{ flex: 1 }}>
+      {/* DEBUG OVERLAY */}
+      {Platform.OS === 'web' && (
+        <View style={{
+          position: 'absolute',
+          bottom: 10,
+          left: 10,
+          zIndex: 9999,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          padding: 8,
+          borderRadius: 4,
+          pointerEvents: 'none'
+        }}>
+          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
+            User: {user ? (user.email || user.uid).substring(0, 15) + '...' : 'Guest'}
+          </Text>
+          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
+            Role: {role || 'N/A'} | Loading: {loading ? 'YES' : 'NO'}
+          </Text>
+          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
+            Path: {window.location.pathname}
+          </Text>
+        </View>
+      )}
       <NavigationContainer
         ref={navigationRef}
-        linking={{
-          prefixes: [
-            // Ensure both the full URL and the local expo link are handled
-            'https://nag3003.github.io/agrisaarthii',
-            Linking.createURL('/'),
-          ],
-          config: {
-            screens: {
-              // Ensure paths do NOT start with slash to append correctly to prefix
-              Onboarding: 'onboarding',
-              Login: 'login',
-              Home: 'home',
-              WorkerHome: 'worker-home',
-              LandownerHome: 'landowner-home',
-              Profile: 'profile',
-              Calculator: 'calculator',
-              CalendarTodo: 'calendar-todo',
-              GovSchemes: 'gov-schemes',
-              Machinery: 'machinery',
-              MarketPrice: 'market-price',
-              Weather: 'weather',
-              SoilHealth: 'soil-health',
-              CropDoctor: 'crop-doctor',
-            }
-          }
-        }}
+        linking={linking}
         fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
       >
         <StatusBar style="light" />

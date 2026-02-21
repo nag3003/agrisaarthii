@@ -1,15 +1,10 @@
 import { Platform } from 'react-native';
 import { logger } from '../utils/logger';
 
-const API_BASE = (() => {
-  // Force 127.0.0.1 for Web to avoid IPv6 resolution issues with localhost
+export const API_BASE = (() => {
   if (Platform.OS === 'web') {
-    // If running on localhost, use local backend
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      return "http://127.0.0.1:8000/api";
-    }
-    // Otherwise, use the public tunnel URL
-    return "https://aa3d0cae8ed5e960-106-208-135-80.serveousercontent.com/api";
+    // For web, use the hosted backend URL (Serveo tunnel or deployed backend)
+    return "https://b82e5d1bd49b81.lhr.life/api";
   }
   // Only use Env var for Native/Production builds if needed
   if (process.env.EXPO_PUBLIC_BACKEND_URL) {

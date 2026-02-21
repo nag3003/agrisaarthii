@@ -30,13 +30,6 @@ const errorScript = `
     }
   }, true);
   
-  // Unhandled Promise Rejection
-  window.addEventListener('unhandledrejection', function(e) {
-     const root = document.getElementById('root');
-     if (root) {
-       root.innerHTML += '<div style="padding:20px;color:orange;font-family:monospace;border-top:1px solid #ccc"><h3>Promise Rejection</h3><p>' + e.reason + '</p></div>';
-     }
-  });
 </script>
 `;
 
@@ -72,20 +65,17 @@ const styleFix = `
   /* Ensure no scrollbars on body, let RN handle scrolling */
   body {
     overflow: hidden;
-    background-color: #F5FDF9; /* Match app background to avoid white flashes */
+    background-color: #8aeebcff; /* Match app background to avoid white flashes */
   }
 </style>
 `;
 html = html.replace('</head>', styleFix + '</head>');
 
-// 5. Inject Base Tag for GitHub Pages Subdirectory
-// This ensures that relative links and history pushState work correctly within the subdirectory
-if (html.includes('<head>')) {
-  html = html.replace('<head>', '<head><base href="/agrisaarthii/" />');
-} else {
-  // Fallback if no head tag (unlikely)
-  html = html.replace('<!DOCTYPE html>', '<!DOCTYPE html><base href="/agrisaarthii/" />');
-}
+// 5. Fix asset paths for GitHub Pages subdirectory
+// With baseUrl: '/agrisaarthii' in app.json, paths are already absolute (/agrisaarthii/...)
+// We only need to fix favicon if it's not handled correctly
+// html = html.replace(/src="\//g, 'src="');
+// html = html.replace(/href="\/favicon.ico"/g, 'href="favicon.ico"');
 
 // 6. SPA Redirect Handling for GitHub Pages
 // This solves the issue where refreshing a sub-route causes a 404
@@ -119,6 +109,7 @@ const notFoundHtml = `<!DOCTYPE html>
     <title>Redirecting...</title>
     <script>
       // Checks if the URL contains the repo name (subdirectory)
+      // For username.github.io, set to 0. For repo-name, set to 1.
       var pathSegmentsToKeep = 1;
       
       var l = window.location;

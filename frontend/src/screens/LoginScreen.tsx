@@ -21,6 +21,7 @@ import { AuthService, useGoogleAuth, useAppleAuth } from '../services/auth';
 import { auth } from '../services/firebase';
 import { ProfileService, UserProfile } from '../services/profile';
 import { Ionicons } from '@expo/vector-icons';
+import { API_BASE } from '../services/api';
 
 import { Storage } from '../services/storage';
 
@@ -869,6 +870,16 @@ export const LoginScreen: React.FC = () => {
               </View>
             </Animated.View>
           </ScrollView>
+
+          {/* Debug Info */}
+          <View style={{ padding: 10, alignItems: 'center' }}>
+            <Text style={{ fontSize: 10, color: '#888' }}>
+              API: {API_BASE}
+            </Text>
+            <Text style={{ fontSize: 10, color: '#888' }}>
+              App: {Platform.OS} | Build: v3.0 (Reset)
+            </Text>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
