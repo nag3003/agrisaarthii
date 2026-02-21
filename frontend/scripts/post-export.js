@@ -77,6 +77,9 @@ html = html.replace('</head>', styleFix + '</head>');
 // html = html.replace(/src="\//g, 'src="');
 // html = html.replace(/href="\/favicon.ico"/g, 'href="favicon.ico"');
 
+// Inject cache busting for scripts
+html = html.replace(/(src=".*\/_expo\/static\/js\/web\/.*?)(")/g, '$1?v=' + Date.now() + '$2');
+
 // 6. SPA Redirect Handling for GitHub Pages
 // This solves the issue where refreshing a sub-route causes a 404
 const spaRedirectScript = `

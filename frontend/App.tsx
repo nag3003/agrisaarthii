@@ -177,8 +177,8 @@ function Main() {
           <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
       Route: {currentRouteName}
     </Text>
-    <Text style={{ color: 'yellow', fontSize: 10, fontFamily: 'monospace' }}>
-      Linking: WILDCARD FIX (v3.4)
+    <Text style={{ color: 'cyan', fontSize: 10, fontFamily: 'monospace' }}>
+      Linking: CACHE BUST (v3.5)
     </Text>
   </View>
 )}
