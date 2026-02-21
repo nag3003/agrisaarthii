@@ -5,7 +5,10 @@
     <title>Redirecting...</title>
     <script>
       // Checks if the URL contains the repo name (subdirectory)
-      var pathSegmentsToKeep = 1;
+      // Since we are at root now, pathSegmentsToKeep should be 0 or handled differently
+      // Actually, for root domain user site, we don't have a subdirectory prefix to keep.
+      // So pathSegmentsToKeep = 0.
+      var pathSegmentsToKeep = 0;
       
       var l = window.location;
       l.replace(
