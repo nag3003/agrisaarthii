@@ -16,7 +16,7 @@ import {
   Easing,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // ADDED
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthService, useGoogleAuth, useAppleAuth } from '../services/auth';
 import { auth } from '../services/firebase';
 import { ProfileService, UserProfile } from '../services/profile';
@@ -29,7 +29,7 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import { Logo } from '../components/Logo';
 
-export const LoginScreen: React.FC = () => {
+export default function LoginScreen({ navigation }: any) {
   const { width } = useWindowDimensions();
   const { refreshSession } = useAuth();
   const { showToast } = useToast();
@@ -454,13 +454,6 @@ export const LoginScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* DEBUG: Verify Login Screen Rendering */}
-      {Platform.OS === 'web' && (
-        <Text style={{ position: 'absolute', top: 50, left: 10, zIndex: 9999, color: 'red', backgroundColor: 'white' }}>
-          Login Screen Active (v3.1)
-        </Text>
-      )}
-
       {/* Mock Login Modal */}
       {showMockLoginModal && (
         <View style={styles.modalOverlay}>

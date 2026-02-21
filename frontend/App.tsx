@@ -75,15 +75,12 @@ const AppStack = ({ role }) => {
 
 const linking = {
   prefixes: [
-    'https://nag3003.github.io/agrisaarthii/', // With slash
-    'https://nag3003.github.io/agrisaarthii',  // Without slash
+    'https://nag3003.github.io/agrisaarthii',
     Linking.createURL('/'), // Localhost fallback
   ],
   config: {
     screens: {
-      Login: {
-        path: '*', // Catch-all for Login to ensure it loads
-      },
+      Login: '',
       Onboarding: 'onboarding',
       Home: 'home',
       WorkerHome: 'worker-home',
@@ -107,11 +104,6 @@ function Main() {
   const { user, role, loading } = useAuth();
   // FORCE ONLINE TRUE for Web Debugging
   const [isOnline, setIsOnline] = useState(true);
-
-  // DEBUG OVERLAY
-  if (Platform.OS === 'web') {
-    // console.log('Current URL:', window.location.href);
-  }
   
   const [currentRouteName, setCurrentRouteName] = useState('Unknown');
 
@@ -153,43 +145,10 @@ function Main() {
 
   return (
     <SafeAreaProvider style={{ flex: 1 }}>
-      {/* DEBUG OVERLAY */}
-      {Platform.OS === 'web' && (
-        <View style={{
-          position: 'absolute',
-          bottom: 10,
-          left: 10,
-          zIndex: 9999,
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          padding: 8,
-          borderRadius: 4,
-          pointerEvents: 'none'
-        }}>
-          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
-            User: {user ? (user.email || user.uid).substring(0, 15) + '...' : 'Guest'}
-          </Text>
-          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
-            Role: {role || 'N/A'} | Loading: {loading ? 'YES' : 'NO'}
-          </Text>
-          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
-            Path: {window.location.pathname}
-          </Text>
-          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
-      Route: {currentRouteName}
-    </Text>
-    <Text style={{ color: 'magenta', fontSize: 10, fontFamily: 'monospace' }}>
-      Linking: DISABLED (v3.6)
-    </Text>
-  </View>
-)}
-      <NavigationContainer
+        <NavigationContainer
           ref={navigationRef}
-          // linking={linking} // DISABLED: Forcing default behavior to fix GitHub Pages
+          linking={linking} 
           fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
-          onStateChange={() => {
-            const route = navigationRef.getCurrentRoute();
-            setCurrentRouteName(route?.name || 'Unknown');
-          }}
         >
         <StatusBar style="light" />
         {user ? (
