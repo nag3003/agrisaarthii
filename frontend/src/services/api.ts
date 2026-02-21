@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 export const API_BASE = (() => {
   if (Platform.OS === 'web') {
     // For web, use the hosted backend URL (Serveo tunnel or deployed backend)
-    return "https://77f6193bc42e82.lhr.life/api";
+    return "https://ecc15d4ba01f71.lhr.life/api";
   }
   // Only use Env var for Native/Production builds if needed
   if (process.env.EXPO_PUBLIC_BACKEND_URL) {
