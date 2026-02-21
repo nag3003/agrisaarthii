@@ -87,13 +87,6 @@
     }
   }, true);
   
-  // Unhandled Promise Rejection
-  window.addEventListener('unhandledrejection', function(e) {
-     const root = document.getElementById('root');
-     if (root) {
-       root.innerHTML += '<div style="padding:20px;color:orange;font-family:monospace;border-top:1px solid #ccc"><h3>Promise Rejection</h3><p>' + e.reason + '</p></div>';
-     }
-  });
 </script>
 </body>
 </html>
