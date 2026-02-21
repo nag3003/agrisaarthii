@@ -43,6 +43,9 @@ const loadingSpinner = `<div id="root" style="display:flex;flex-direction:column
 // Replace root div
 html = html.replace('<div id="root"></div>', loadingSpinner);
 
+// Inject DEBUG header to verify HTML load
+html = html.replace('<body>', '<body style="margin:0;padding:0;"><h1 style="position:absolute;z-index:9999;background:white;color:red;top:0;left:0;">HTML LOADED (v4)</h1><noscript>You need to enable JavaScript to run this app.</noscript>');
+
 // Insert error script before closing body
 html = html.replace('</body>', errorScript + '</body>');
 
