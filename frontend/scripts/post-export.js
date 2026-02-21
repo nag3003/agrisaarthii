@@ -63,11 +63,11 @@ const styleFix = `
     flex-direction: column;
   }
   /* Ensure no scrollbars on body, let RN handle scrolling */
-  body {
-    overflow: hidden;
-    background-color: #8aeebcff; /* Match app background to avoid white flashes */
-  }
-</style>
+    body {
+      overflow: hidden;
+      background-color: #333333; /* Dark grey to see if App renders transparently */
+    }
+  </style>
 `;
 html = html.replace('</head>', styleFix + '</head>');
 
