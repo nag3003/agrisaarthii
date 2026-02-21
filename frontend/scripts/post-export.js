@@ -36,7 +36,7 @@ const errorScript = `
 // Insert invalidating text to be sure we are seeing new version
 const loadingSpinner = `<div id="root" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-size:18px;font-family:system-ui;">
   <div style="font-size:40px;margin-bottom:20px;">🚜</div>
-  <div>Loading Agri... (v2)</div>
+  <div>Loading Agri... (v3)</div>
   <div style="font-size:12px;color:#666;margin-top:10px;">Initializing...</div>
 </div>`;
 
@@ -46,10 +46,12 @@ html = html.replace('<div id="root"></div>', loadingSpinner);
 // Insert error script before closing body
 html = html.replace('</body>', errorScript + '</body>');
 
-// Ensure base tag is correct if needed, or rely on bundle paths.
-// Since we are using experiments.baseUrl, we don't need to manually fix src paths usually.
-// But let's verify if we want to force them.
-// html = html.replace(/src="\//g, 'src="/agrisaarthii/'); // Double check we don't double prefix if baseUrl works
+// 2. Inject Base Tag for Subdirectory Support
+// This is crucial for assets to load correctly in a subdirectory (e.g. /agrisaarthii/)
+const BASE_URL = '/agrisaarthii';
+if (!html.includes('<base href')) {
+  html = html.replace('<head>', `<head><base href="${BASE_URL}/" />`);
+}
 
 // 4. Inject Global CSS for React Native Web Layout
 const styleFix = `

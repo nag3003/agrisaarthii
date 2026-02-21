@@ -15,7 +15,7 @@ import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ToastProvider } from './src/components/Toast';
-import { LoginScreen } from './src/screens/LoginScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 
 // --- RESTORED ALL EXPORTS ---
@@ -124,7 +124,7 @@ function Main() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FDF9' }}>
-        <Text style={{ marginTop: 20 }}>Loading Agri...</Text>
+        <Text style={{ marginTop: 20 }}>Loading App (v3.1)...</Text>
         <ActivityIndicator size="large" color="#27AE60" />
       </View>
     );
