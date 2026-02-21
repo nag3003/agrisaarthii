@@ -5,9 +5,7 @@
     <title>Redirecting...</title>
     <script>
       // Checks if the URL contains the repo name (subdirectory)
-      // Since we are at root now, pathSegmentsToKeep should be 0 or handled differently
-      // Actually, for root domain user site, we don't have a subdirectory prefix to keep.
-      // So pathSegmentsToKeep = 0.
+      // For username.github.io, set to 0. For repo-name, set to 1.
       var pathSegmentsToKeep = 0;
       
       var l = window.location;
