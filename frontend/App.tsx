@@ -81,8 +81,8 @@ const linking = {
   config: {
     screens: {
       Login: {
-        path: '',
-        exact: false
+        path: '', // Matches /agrisaarthii/ exactly
+        exact: true
       },
       Onboarding: 'onboarding',
       Home: 'home',
@@ -178,13 +178,13 @@ function Main() {
             Route: {currentRouteName}
           </Text>
           <Text style={{ color: 'yellow', fontSize: 10, fontFamily: 'monospace' }}>
-            Linking: DISABLED (v3.2)
+            Linking: ENABLED (v3.3)
           </Text>
         </View>
       )}
       <NavigationContainer
         ref={navigationRef}
-        // linking={linking} // DISABLED FOR DEBUGGING
+        linking={linking} // RESTORED
         fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
         onStateChange={() => {
           const route = navigationRef.getCurrentRoute();

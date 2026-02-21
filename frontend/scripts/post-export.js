@@ -65,7 +65,7 @@ const styleFix = `
   /* Ensure no scrollbars on body, let RN handle scrolling */
     body {
       overflow: hidden;
-      background-color: #333333; /* Dark grey to see if App renders transparently */
+      background-color: #8aeebcff; /* Match app background */
     }
   </style>
 `;
