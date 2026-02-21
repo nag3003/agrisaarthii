@@ -1,0 +1,172 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { User, onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../services/firebase';
+import { ProfileService } from '../services/profile';
+import { Storage } from '../services/storage';
+
+interface AuthContextType {
+  user: any | null;
+  role: string | null;
+  loading: boolean;
+  refreshSession: () => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  role: null,
+  loading: true,
+  refreshSession: async () => { },
+  logout: async () => { },
+});
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<any | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const logout = async () => {
+    try {
+      setLoading(true);
+      // 1. Firebase Logout
+      await auth.signOut();
+      // 2. Clear Local Storage
+      await Storage.clearAll();
+      // 3. Clear State
+      setUser(null);
+      setRole(null);
+    } catch (e) {
+      console.error("AuthContext: Logout error", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshSession = async () => {
+    const storedUser = await Storage.getUser();
+
+    if (user || storedUser) {
+      const activeUser = user || storedUser;
+      try {
+        // If it's a demo user, don't try to fetch from Firebase
+        if (activeUser.uid.startsWith('demo_')) {
+          setRole(activeUser.role || 'farmer');
+          setUser(activeUser);
+          return;
+        }
+
+        const profile = await ProfileService.getProfile(activeUser.uid);
+        if (profile) {
+          setRole(profile.role);
+          setUser(activeUser);
+          await Storage.saveUser({
+            uid: activeUser.uid,
+            email: activeUser.email || '',
+            displayName: activeUser.displayName || profile.name || '',
+            role: profile.role,
+          });
+        } else {
+          // Fallback to stored role or default to 'farmer'
+          const finalRole = (storedUser && storedUser.role) ? storedUser.role : 'farmer';
+          setRole(finalRole);
+          setUser(activeUser);
+          
+          if (!storedUser || !storedUser.role) {
+            await Storage.saveUser({
+              uid: activeUser.uid,
+              email: activeUser.email || '',
+              displayName: activeUser.displayName || '',
+              role: 'farmer',
+            });
+          }
+        }
+      } catch (error: any) {
+        console.error('AuthContext: Error refreshing session:', error);
+      }
+    }
+  };
+
+  useEffect(() => {
+    // Initial check for stored user (Demo or persistent session)
+    const checkPersistedUser = async () => {
+      const storedUser = await Storage.getUser();
+      if (storedUser && storedUser.uid.startsWith('demo_')) {
+        setUser(storedUser);
+        setRole(storedUser.role || 'farmer');
+        setLoading(false);
+      }
+    };
+
+    checkPersistedUser();
+
+    // Check if auth is a mock (fallback from firebase.ts error)
+    // @ts-ignore
+    if (auth.isMock) {
+      console.warn("AuthContext: Running in safe mode with mock auth.");
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        try {
+          const profile = await ProfileService.getProfile(firebaseUser.uid);
+          if (profile) {
+            setRole(profile.role);
+            await Storage.saveUser({
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              role: profile.role,
+            });
+          } else {
+            // Fallback to stored role or default to 'farmer'
+            const storedUser = await Storage.getUser();
+            if (storedUser && storedUser.uid === firebaseUser.uid && storedUser.role) {
+              setRole(storedUser.role);
+            } else {
+              setRole('farmer'); // Default to farmer if no profile/stored role
+            }
+          }
+        } catch (error: any) {
+          console.error('AuthContext: Error in auth state change:', error);
+          setRole('farmer'); // Default on error to keep app usable
+        }
+      } else {
+        // Only clear if not in demo mode
+        const currentStored = await Storage.getUser();
+        if (!currentStored || !currentStored.uid.startsWith('demo_')) {
+          setUser(null);
+          setRole(null);
+          await Storage.clearUser();
+        }
+      }
+
+      setLoading(false);
+    });
+
+    // Safety timeout: If firebase takes too long or fails silently, stop loading
+    const timer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) {
+          console.warn("AuthContext: Auth check timed out, forcing loading false");
+          return false;
+        }
+        return prev;
+      });
+    }, 15000);
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, role, loading, refreshSession, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);

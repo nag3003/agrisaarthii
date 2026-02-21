@@ -112,6 +112,8 @@ function Main() {
   if (Platform.OS === 'web') {
     // console.log('Current URL:', window.location.href);
   }
+  
+  const [currentRouteName, setCurrentRouteName] = useState('Unknown');
 
   useEffect(() => {
     // FORCE ONLINE ON WEB to avoid false offline detection
@@ -172,12 +174,19 @@ function Main() {
           <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
             Path: {window.location.pathname}
           </Text>
+          <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
+            Route: {currentRouteName}
+          </Text>
         </View>
       )}
       <NavigationContainer
         ref={navigationRef}
         linking={linking}
         fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
+        onStateChange={() => {
+          const route = navigationRef.getCurrentRoute();
+          setCurrentRouteName(route?.name || 'Unknown');
+        }}
       >
         <StatusBar style="light" />
         {user ? (

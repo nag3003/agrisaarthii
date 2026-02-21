@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  // SafeAreaView, // REMOVED
+  SafeAreaView,
   KeyboardAvoidingView,
   ScrollView,
   Dimensions,
@@ -16,12 +16,11 @@ import {
   Easing,
   useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context'; // ADDED
+// Add hook import
 import { AuthService, useGoogleAuth, useAppleAuth } from '../services/auth';
 import { auth } from '../services/firebase';
 import { ProfileService, UserProfile } from '../services/profile';
 import { Ionicons } from '@expo/vector-icons';
-import { API_BASE } from '../services/api';
 
 import { Storage } from '../services/storage';
 
@@ -454,13 +453,6 @@ export const LoginScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* DEBUG: Verify Login Screen Rendering */}
-      {Platform.OS === 'web' && (
-        <Text style={{ position: 'absolute', top: 50, left: 10, zIndex: 9999, color: 'red', backgroundColor: 'white' }}>
-          Login Screen Active (v3.1)
-        </Text>
-      )}
-
       {/* Mock Login Modal */}
       {showMockLoginModal && (
         <View style={styles.modalOverlay}>
@@ -877,16 +869,6 @@ export const LoginScreen: React.FC = () => {
               </View>
             </Animated.View>
           </ScrollView>
-
-          {/* Debug Info */}
-          <View style={{ padding: 10, alignItems: 'center' }}>
-            <Text style={{ fontSize: 10, color: '#888' }}>
-              API: {API_BASE}
-            </Text>
-            <Text style={{ fontSize: 10, color: '#888' }}>
-              App: {Platform.OS} | Build: v3.0 (Reset)
-            </Text>
-          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
     </View>
