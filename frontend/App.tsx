@@ -75,14 +75,14 @@ const AppStack = ({ role }) => {
 
 const linking = {
   prefixes: [
-    'https://nag3003.github.io/agrisaarthii',
+    'https://nag3003.github.io/agrisaarthii/', // With slash
+    'https://nag3003.github.io/agrisaarthii',  // Without slash
     Linking.createURL('/'), // Localhost fallback
   ],
   config: {
     screens: {
       Login: {
-        path: '', // Matches /agrisaarthii/ exactly
-        exact: true
+        path: '*', // Catch-all for Login to ensure it loads
       },
       Onboarding: 'onboarding',
       Home: 'home',
@@ -175,13 +175,13 @@ function Main() {
             Path: {window.location.pathname}
           </Text>
           <Text style={{ color: '#00ff00', fontSize: 12, fontFamily: 'monospace' }}>
-            Route: {currentRouteName}
-          </Text>
-          <Text style={{ color: 'yellow', fontSize: 10, fontFamily: 'monospace' }}>
-            Linking: ENABLED (v3.3)
-          </Text>
-        </View>
-      )}
+      Route: {currentRouteName}
+    </Text>
+    <Text style={{ color: 'yellow', fontSize: 10, fontFamily: 'monospace' }}>
+      Linking: WILDCARD FIX (v3.4)
+    </Text>
+  </View>
+)}
       <NavigationContainer
         ref={navigationRef}
         linking={linking} // RESTORED
