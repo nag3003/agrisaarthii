@@ -124,7 +124,7 @@ function Main() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FDF9' }}>
-        <Text style={{ marginTop: 20 }}>Loading App (v3.1)...</Text>
+        <Text style={{ marginTop: 20 }}>Loading App (v4)...</Text>
         <ActivityIndicator size="large" color="#27AE60" />
       </View>
     );
