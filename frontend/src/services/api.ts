@@ -9,7 +9,7 @@ const API_BASE = (() => {
       return "http://127.0.0.1:8000/api";
     }
     // Otherwise, use the public tunnel URL
-    return "https://ebb97717a709289b-157-51-151-144.serveousercontent.com/api";
+    return "https://aa3d0cae8ed5e960-106-208-135-80.serveousercontent.com/api";
   }
   // Only use Env var for Native/Production builds if needed
   if (process.env.EXPO_PUBLIC_BACKEND_URL) {

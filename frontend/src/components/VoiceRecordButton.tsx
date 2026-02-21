@@ -152,7 +152,7 @@ export const VoiceRecordButton: React.FC<VoiceRecordButtonProps> = ({
   }
 
   // Force Fallback for now to test backend connectivity if WebSpeech is flaky
-  const FORCE_FALLBACK = true;
+  const FORCE_FALLBACK = false;
 
   function startWebListening() {
     if (FORCE_FALLBACK) {

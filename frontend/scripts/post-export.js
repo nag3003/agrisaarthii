@@ -87,5 +87,54 @@ if (html.includes('<head>')) {
   html = html.replace('<!DOCTYPE html>', '<!DOCTYPE html><base href="/agrisaarthii/" />');
 }
 
+// 6. SPA Redirect Handling for GitHub Pages
+// This solves the issue where refreshing a sub-route causes a 404
+const spaRedirectScript = `
+<script type="text/javascript">
+  // Single Page Apps for GitHub Pages
+  // MIT License
+  // https://github.com/rafgraph/spa-github-pages
+  (function(l) {
+    if (l.search[1] === '/' ) {
+      var decoded = l.search.slice(1).split('&').map(function(s) { 
+        return s.replace(/~and~/g, '&') 
+      }).join('?');
+      window.history.replaceState(null, null,
+          l.pathname.slice(0, -1) + decoded + l.hash
+      );
+    }
+  }(window.location))
+</script>
+`;
+html = html.replace('<head>', '<head>' + spaRedirectScript);
+
 fs.writeFileSync(indexPath, html);
-console.log('Post-export processing complete: Injected error handler and loading UI.');
+console.log('Post-export processing complete: Injected error handler, loading UI, and SPA redirect script.');
+
+// 7. Generate a smart 404.html for SPA redirection
+const notFoundHtml = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <script>
+      // Checks if the URL contains the repo name (subdirectory)
+      var pathSegmentsToKeep = 1;
+      
+      var l = window.location;
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?p=/' +
+        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+        (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+        l.hash
+      );
+    </script>
+  </head>
+  <body>
+  </body>
+</html>`;
+
+const notFoundPath = path.join(distPath, '404.html');
+fs.writeFileSync(notFoundPath, notFoundHtml);
+console.log('Generated smart 404.html for SPA routing.');

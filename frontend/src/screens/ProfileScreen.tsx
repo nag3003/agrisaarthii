@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ImagePickerService } from '../services/imagePicker';
 // import * as ImagePicker from 'expo-image-picker';
 import { AuthService } from '../services/auth';
+import { askJarvis } from '../services/api';
 import { ProfileService, UserProfile } from '../services/profile';
 import { Storage } from '../services/storage';
 import { useAuth } from '../context/AuthContext';
@@ -211,10 +212,11 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
     });
   };
 
-  const handleVoiceText = (text: string) => {
+  const handleVoiceText = async (text: string) => {
+    // 1. Try local navigation first
     if (handleVoiceCommand(text)) return;
     
-    // Profile specific commands
+    // 2. Profile specific commands
     if (text.toLowerCase().includes("edit") || text.toLowerCase().includes("change")) {
        setIsEditing(true);
        if (isVoiceOutputEnabled) {
@@ -222,9 +224,31 @@ export const ProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => 
             language: profile?.language === 'hi' ? 'hi-IN' : 'en-US' 
           });
        }
+       return;
     } else if (text.toLowerCase().includes("save") || text.toLowerCase().includes("update")) {
         handleSave();
-     }
+        return;
+    }
+
+    // 3. Send to Jarvis (Backend AI) for general queries
+    try {
+        setProcessingVoice(true);
+        // Note: askJarvis currently only accepts text. Language handling to be added in future.
+        const response = await askJarvis(text);
+        if (response) {
+            SpeechService.speak(response, { 
+                language: profile?.language === 'hi' ? 'hi-IN' : 'en-US' 
+            });
+            Alert.alert('Agri Assistant', response);
+        }
+    } catch (error) {
+        console.error("Jarvis error:", error);
+        SpeechService.speak("Sorry, I couldn't understand that.", { 
+            language: profile?.language === 'hi' ? 'hi-IN' : 'en-US' 
+        });
+    } finally {
+        if (mounted.current) setProcessingVoice(false);
+    }
    };
 
   return (
