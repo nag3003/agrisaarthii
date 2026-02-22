@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+<script type="text/javascript">
+  // Single Page Apps for GitHub Pages
+  // MIT License
+  // https://github.com/rafgraph/spa-github-pages
+  (function(l) {
+    if (l.search[1] === '/' ) {
+      var decoded = l.search.slice(1).split('&').map(function(s) { 
+        return s.replace(/~and~/g, '&') 
+      }).join('?');
+      window.history.replaceState(null, null,
+          l.pathname.slice(0, -1) + decoded + l.hash
+      );
+    }
+  }(window.location))
+</script>
+
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
@@ -52,7 +68,7 @@
   <div style="font-size:40px;margin-bottom:20px;">🚜</div>
   <div>Loading AgriSaarthii...</div>
 </div>
-  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-e9c116a2a9f372c308e5a08db5640685.js?v=1771731298137" defer></script>
+  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-e9c116a2a9f372c308e5a08db5640685.js?v=1771731434634" defer></script>
 
 <script>
   window.addEventListener('error', function(e) {
@@ -69,8 +85,6 @@
     // Runtime Error
     if (e.message) {
       console.error('Runtime Error:', e.message);
-      // Optional: Visual feedback if needed, but let's keep it clean for "old app" feel
-      // root.innerHTML += '<div style="color:red">Error: ' + e.message + '</div>';
     }
   }, true);
 </script>
