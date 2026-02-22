@@ -1,22 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-<script type="text/javascript">
-  // Single Page Apps for GitHub Pages
-  // MIT License
-  // https://github.com/rafgraph/spa-github-pages
-  (function(l) {
-    if (l.search[1] === '/' ) {
-      var decoded = l.search.slice(1).split('&').map(function(s) { 
-        return s.replace(/~and~/g, '&') 
-      }).join('?');
-      window.history.replaceState(null, null,
-          l.pathname.slice(0, -1) + decoded + l.hash
-      );
-    }
-  }(window.location))
-</script>
-
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
@@ -47,7 +31,7 @@
     margin: 0;
     padding: 0;
     overflow: hidden; /* Let RN handle scrolling */
-    background-color: #8aeebcff; /* Match app background */
+    background-color: white;
   }
   #root {
     height: 100%;
@@ -64,12 +48,11 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <!-- The root element for your Expo app. -->
-    <div id="root" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-size:18px;font-family:system-ui;">
+    <div id="root" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-size:18px;font-family:system-ui;background-color:white;">
   <div style="font-size:40px;margin-bottom:20px;">🚜</div>
   <div>Loading AgriSaarthii...</div>
-  <div style="font-size:12px;color:#666;margin-top:10px;">Please wait</div>
 </div>
-  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-e9c116a2a9f372c308e5a08db5640685.js?v=1771731141059" defer></script>
+  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-e9c116a2a9f372c308e5a08db5640685.js?v=1771731298137" defer></script>
 
 <script>
   window.addEventListener('error', function(e) {
@@ -78,13 +61,16 @@
     
     // Check if it's a script loading error
     if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-       root.innerHTML = '<div style="padding:20px;color:red;font-family:monospace"><h3>Asset Load Error</h3><p>Failed to load: ' + (e.target.src || e.target.href) + '</p><p>BaseURI: ' + document.baseURI + '</p></div>';
+       // Ignore for now or log quietly
+       console.warn('Asset Load Error:', e.target.src || e.target.href);
        return;
     }
 
     // Runtime Error
     if (e.message) {
-      root.innerHTML += '<div style="padding:20px;color:red;font-family:monospace;border-top:1px solid #ccc"><h3>Runtime Error</h3><p>' + e.message + '</p></div>';
+      console.error('Runtime Error:', e.message);
+      // Optional: Visual feedback if needed, but let's keep it clean for "old app" feel
+      // root.innerHTML += '<div style="color:red">Error: ' + e.message + '</div>';
     }
   }, true);
 </script>
