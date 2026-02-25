@@ -55,6 +55,14 @@
     display: flex;
     flex-direction: column;
   }
+  /* Fix React Native Web flex layout collapsing to 0px width in production */
+  #root > div {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    flex: 1 !important;
+  }
 </style>
 </head>
 
@@ -68,7 +76,7 @@
   <div style="font-size:40px;margin-bottom:20px;">🚜</div>
   <div>Loading AgriSaarthii...</div>
 </div>
-  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-98f141b5ce36d30722ee2fd8e733f71b.js?v=1771983350358" defer></script>
+  <script src="/agrisaarthii/_expo/static/js/web/AppEntry-98f141b5ce36d30722ee2fd8e733f71b.js?v=1771984062861" defer></script>
 
 <script>
   window.addEventListener('error', function(e) {
