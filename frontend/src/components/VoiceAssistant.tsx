@@ -7,9 +7,12 @@ import {
   Animated, 
   Modal, 
   Dimensions, 
-  Platform 
+  Platform, 
+  Vibration,
+  TextInput 
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SpeechService } from '../services/speech';
 import { LiveVoiceSession } from '../services/geminiService';
 import { AppView, FarmerProfile } from '../types';
 
@@ -18,6 +21,8 @@ interface VoiceAssistantProps {
   onBack: () => void;
   onNavigate: (view: AppView) => void;
   profile: FarmerProfile | null;
+  isBackendDown?: boolean;
+  onRetryConnection?: () => void;
 }
 
 const { width } = Dimensions.get('window');
@@ -26,16 +31,22 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
   visible, 
   onBack, 
   onNavigate, 
-  profile 
+  profile,
+  isBackendDown = false,
+  onRetryConnection
 }) => {
   const [isActive, setIsActive] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [queryText, setQueryText] = useState<string>(''); // For text-based queries
   const [error, setError] = useState<string | null>(null);
+  const [debugMode, setDebugMode] = useState(false);
   const sessionRef = useRef<LiveVoiceSession | null>(null);
   
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const pingAnim = useRef(new Animated.Value(0)).current;
+  const listenBlinkAnim = useRef(new Animated.Value(0)).current;
   const waveAnims = [
     useRef(new Animated.Value(0.3)).current,
     useRef(new Animated.Value(0.3)).current,
@@ -46,8 +57,14 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
 
   useEffect(() => {
     if (visible) {
-      startSession();
-      startAnimations();
+      if (!isBackendDown) {
+        startSession();
+        startAnimations();
+      } else {
+          // If backend is down, we don't start the session automatically to avoid immediate error
+          // But we show the UI so user can see status
+          setError("Cannot connect to server. Check internet or tunnel.");
+      }
     } else {
       stopSession();
       stopAnimations();
@@ -56,11 +73,27 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
     return () => {
       stopSession();
     };
-  }, [visible]);
+  }, [visible, isBackendDown]);
+
+  useEffect(() => {
+    // Blink indicator when actively listening (not speaking)
+    if (isActive && !isSpeaking && !error) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(listenBlinkAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(listenBlinkAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      listenBlinkAnim.stopAnimation();
+      listenBlinkAnim.setValue(0);
+    }
+  }, [isActive, isSpeaking, error]);
 
   useEffect(() => {
     if (isSpeaking) {
       startWaveAnimation();
+      if (Platform.OS === 'web') SpeechService.beep(700, 100, 0.06);
     } else {
       stopWaveAnimation();
     }
@@ -68,10 +101,13 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
 
   const startSession = () => {
     setError(null);
+    setTranscript(null);
     const session = new LiveVoiceSession({
       onConnect: () => {
         setIsActive(true);
         setError(null);
+        Vibration.vibrate(10);
+        if (Platform.OS === 'web') SpeechService.beep(1000, 120, 0.08);
       },
       onDisconnect: () => setIsActive(false),
       onSpeaking: (speaking) => setIsSpeaking(speaking),
@@ -83,6 +119,7 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
           onBack(); // Close modal on navigation
         }
       },
+      onTranscript: (text) => setTranscript(text),
       onError: (err) => {
         setError(err.message);
         setIsActive(false);
@@ -99,9 +136,40 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
     setIsSpeaking(false);
   };
 
+  const handleRestart = async () => {
+    console.log('[VoiceAssistant] Manual Mic Restart triggered');
+    SpeechService.restart();
+    if (sessionRef.current) {
+      await sessionRef.current.restart();
+    }
+  };
+
+  const handleTextQuery = async () => {
+    if (queryText.trim() && sessionRef.current) {
+        const text = queryText;
+        setQueryText('');
+        setTranscript(text);
+        await sessionRef.current.processText(text);
+    }
+  };
+
   const toggleSession = () => {
+    if (isBackendDown) {
+        if (onRetryConnection) {
+            setError(null);
+            onRetryConnection();
+        }
+        return;
+    }
+
     if (isActive) {
-      stopSession();
+      if (Platform.OS !== 'web') {
+          // Native: Tap to process current speech (Manual Endpointing)
+          // The user can close the modal via the X button to exit completely
+          sessionRef.current?.stopListeningAndProcess();
+      } else {
+          stopSession();
+      }
     } else {
       startSession();
     }
@@ -183,11 +251,16 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>AgriSaarthi</Text>
-            <View style={styles.liveBadge}>
-              <Text style={styles.liveText}>LIVE</Text>
+            <TouchableOpacity onLongPress={() => setDebugMode(!debugMode)}>
+                <Text style={styles.headerTitle}>AgriSaarthi</Text>
+            </TouchableOpacity>
+            <View style={[styles.liveBadge, isBackendDown && { backgroundColor: '#EF4444' }]}>
+              <Text style={styles.liveText}>{isBackendDown ? 'OFFLINE' : 'LIVE'}</Text>
             </View>
           </View>
+          <TouchableOpacity onPress={handleRestart} style={styles.closeButton}>
+            <Ionicons name="refresh" size={22} color="#FFF" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={onBack} style={styles.closeButton}>
             <Ionicons name="close" size={24} color="#FFF" />
           </TouchableOpacity>
@@ -198,30 +271,47 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
           {/* Status Text */}
           <View style={styles.statusContainer}>
             {error ? (
-              <View style={styles.errorContainer}>
-                <View style={styles.errorBox}>
-                  <Ionicons name="warning" size={20} color="#FCA5A5" />
+              <View style={{ alignItems: 'center' }}>
                   <Text style={styles.errorText}>{error}</Text>
-                </View>
-                <TouchableOpacity onPress={startSession} style={styles.retryButton}>
-                  <Ionicons name="refresh" size={14} color="#86EFAC" />
-                  <Text style={styles.retryText}>Tap to retry</Text>
-                </TouchableOpacity>
+                  {isBackendDown && (
+                      <TouchableOpacity 
+                          style={{ marginTop: 10, padding: 8, backgroundColor: '#FFFFFF30', borderRadius: 8 }}
+                          onPress={onRetryConnection}
+                      >
+                          <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Retry Connection</Text>
+                      </TouchableOpacity>
+                  )}
               </View>
-            ) : isActive ? (
-              isSpeaking ? (
-                <Text style={[styles.statusText, styles.speakingText]}>AgriSaarthi is speaking...</Text>
-              ) : (
-                <Text style={styles.statusText}>Listening... Speak now</Text>
-              )
             ) : (
-              <Text style={styles.inactiveText}>Tap microphone to connect</Text>
-            )}
-
-            {!error && (
-              <Text style={styles.subText}>
-                {profile ? `Talking to ${profile.name}` : 'Set up your profile for better advice'}
-              </Text>
+              <View style={{ alignItems: 'center' }}>
+                  <Text style={[styles.statusText, isSpeaking && { color: '#3498DB' }]}>
+                    {isActive 
+                        ? (isSpeaking ? "AI is replying..." : "Listening...") 
+                        : "Tap to Speak"}
+                  </Text>
+                  {isActive && (isSpeaking || !error) && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8 }}>
+                      <Animated.View 
+                        style={{
+                          width: 10, 
+                          height: 10, 
+                          borderRadius: 5, 
+                          marginRight: 8,
+                          backgroundColor: isSpeaking ? '#3498DB' : '#22C55E',
+                          opacity: listenBlinkAnim
+                        }} 
+                      />
+                      <Text style={{ color: isSpeaking ? '#3498DB' : '#86EFAC' }}>
+                        {isSpeaking ? "Voice active" : "AI is listening"}
+                      </Text>
+                    </View>
+                  )}
+                  {transcript && (
+                      <Text style={{ fontSize: 18, fontStyle: 'italic', marginTop: 8, color: isSpeaking ? '#3498DB' : '#DCFCE7', textAlign: 'center' }}>
+                          "{transcript}"
+                      </Text>
+                  )}
+              </View>
             )}
           </View>
 
@@ -287,7 +377,40 @@ export const VoiceAssistant: React.FC<VoiceAssistantProps> = ({
               </Animated.View>
             </TouchableOpacity>
           </View>
+
+          {/* Text Input Fallback */}
+          <View style={styles.textInputContainer}>
+            <TextInput
+              style={styles.textInput}
+              placeholder={profile?.language === 'hi' ? "सवाल टाइप करें..." : "Type your question..."}
+              placeholderTextColor="rgba(255, 255, 255, 0.5)"
+              value={queryText}
+              onChangeText={setQueryText}
+              onSubmitEditing={handleTextQuery}
+              returnKeyType="send"
+            />
+            <TouchableOpacity 
+              onPress={handleTextQuery}
+              disabled={!queryText.trim()}
+              style={[styles.sendButton, !queryText.trim() && { opacity: 0.5 }]}
+            >
+              <Ionicons name="send" size={20} color="#FFF" />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Debug Panel */}
+        {debugMode && (
+             <View style={{ position: 'absolute', bottom: 120, left: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.8)', padding: 10, borderRadius: 10, zIndex: 999 }}>
+                  <Text style={{ color: '#FFF', fontSize: 12, marginBottom: 5, textAlign: 'center' }}>Test Voice Commands (Tap to Simulate):</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
+                      <TouchableOpacity onPress={() => { sessionRef.current?.processText('Open Calculator'); setTranscript('Open Calculator'); }} style={{ padding: 8, backgroundColor: '#333', borderRadius: 5 }}><Text style={{ color: '#FFF' }}>Calculator</Text></TouchableOpacity>
+                      <TouchableOpacity onPress={() => { sessionRef.current?.processText('Open Crop Doctor'); setTranscript('Open Crop Doctor'); }} style={{ padding: 8, backgroundColor: '#333', borderRadius: 5 }}><Text style={{ color: '#FFF' }}>Crop Doctor</Text></TouchableOpacity>
+                      <TouchableOpacity onPress={() => { sessionRef.current?.processText('Weather'); setTranscript('Weather'); }} style={{ padding: 8, backgroundColor: '#333', borderRadius: 5 }}><Text style={{ color: '#FFF' }}>Weather</Text></TouchableOpacity>
+                      <TouchableOpacity onPress={() => { sessionRef.current?.processText('How do I grow tomatoes?'); setTranscript('How do I grow tomatoes?'); }} style={{ padding: 8, backgroundColor: '#333', borderRadius: 5 }}><Text style={{ color: '#FFF' }}>Tomatoes</Text></TouchableOpacity>
+                  </View>
+             </View>
+        )}
       </View>
     </Modal>
   );
@@ -438,5 +561,26 @@ const styles = StyleSheet.create({
     borderRadius: 80,
     backgroundColor: '#22C55E', // green-500
     zIndex: -1,
+  },
+  textInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 25,
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    marginHorizontal: 30,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  textInput: {
+    flex: 1,
+    height: 45,
+    color: '#FFF',
+    fontSize: 16,
+  },
+  sendButton: {
+    padding: 8,
   }
 });

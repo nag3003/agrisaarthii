@@ -4,6 +4,7 @@ import { doc, setDoc, getDoc } from 'firebase/firestore/lite';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logger } from '../utils/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getApiBase } from './api';
 
 export type UserRole = 'farmer' | 'worker' | 'landowner';
 
@@ -49,14 +50,14 @@ export const ProfileService = {
         logger.warn('Profile', 'Failed to save to local storage', { error: localError });
       }
 
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
+      const apiBase = getApiBase();
 
       // 2. Attempt to save via Backend API
       let backendSuccess = false;
-      if (backendUrl) {
+      if (apiBase) {
         try {
-          logger.debug('Profile', 'Attempting backend save...', { url: `${backendUrl}/api/profile/update` });
-          await axios.put(`${backendUrl}/api/profile/update`, profileData, {
+          logger.debug('Profile', 'Attempting backend save...', { url: `${apiBase}/profile/update` });
+          await axios.put(`${apiBase}/profile/update`, profileData, {
             timeout: 15000, // Increased for tunnel latency
             headers: {
               'bypass-tunnel-reminder': 'true'
@@ -128,11 +129,11 @@ export const ProfileService = {
     let fetchedProfile: UserProfile | null = null;
 
     // 1. Try Backend API
-    const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
-    if (backendUrl) {
+    const apiBase = getApiBase();
+    if (apiBase) {
       try {
         logger.debug('Profile', 'Attempting backend fetch...', { uid });
-        const response = await axios.get(`${backendUrl}/api/profile/${uid}`, {
+        const response = await axios.get(`${apiBase}/profile/${uid}`, {
           timeout: 15000, // Increased for tunnel latency
           headers: {
             'bypass-tunnel-reminder': 'true'

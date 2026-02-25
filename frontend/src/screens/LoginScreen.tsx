@@ -192,6 +192,8 @@ export default function LoginScreen({ navigation }: any) {
       useNativeDriver: true,
     }).start();
 
+    if (Platform.OS === 'web') return;
+
     // Particle animations
     particles.forEach((p, i) => {
       Animated.loop(

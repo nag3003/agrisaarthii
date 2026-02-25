@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Calendar } from 'react-native-calendars';
 import { NotificationService } from '../services/notifications';
 import { Storage } from '../services/storage';
-import { getCalendar } from '../services/api';
+import { getCalendar, sendVoice } from '../services/api';
 import { ProfileService } from '../services/profile';
 import { VoiceRecordButton } from '../components/VoiceRecordButton';
 import { processLocalCommand } from '../utils/voiceCommandHelper';
@@ -435,16 +435,61 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
     });
   };
 
+  const handleVoiceComplete = async (uri: string) => {
+    // Prime speech service immediately
+    if (isVoiceOutputEnabled) {
+      SpeechService.speak("", { volume: 0 }); 
+    }
+
+    setProcessingVoice(true);
+    try {
+        const response = await sendVoice(uri);
+        if (response && response.text) {
+            handleVoiceText(response.text);
+        }
+    } catch (error) {
+        console.error('Failed to process voice', error);
+        Alert.alert("Error", "Failed to process voice command.");
+    } finally {
+        setProcessingVoice(false);
+    }
+  };
+
   const handleVoiceText = (text: string) => {
     if (handleVoiceCommand(text)) return;
     
+    const lower = text.toLowerCase();
+    
     // Check for "add task" command
-    if (text.toLowerCase().includes("add") || text.toLowerCase().includes("create")) {
-       setNewTodoText(text);
+    if (lower.includes("add") || lower.includes("create") || lower.includes("remind")) {
+       let taskText = text.replace(/add|create|remind me to|task|todo/gi, '').trim();
+       if (!taskText) taskText = "New Task";
+       
+       setNewTodoText(taskText);
        setModalVisible(true);
        if (isVoiceOutputEnabled) {
-         SpeechService.speak("Opening task creator", { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+         SpeechService.speak(`Creating task: ${taskText}`, { language: language === 'hi' ? 'hi-IN' : 'en-US' });
        }
+       return;
+    }
+
+    // Specific Shortcuts
+    if (lower.includes("water") || lower.includes("irrigate")) {
+        addTemplateTask('Watering the crops', 'high', true);
+        if (isVoiceOutputEnabled) SpeechService.speak("Added watering task", { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+        return;
+    }
+
+    if (lower.includes("fertilizer") || lower.includes("urea")) {
+        addTemplateTask('Applying fertilizer', 'medium', true);
+        if (isVoiceOutputEnabled) SpeechService.speak("Added fertilizer task", { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+        return;
+    }
+
+    if (lower.includes("pest") || lower.includes("insect")) {
+        addTemplateTask('Check for pests', 'high', true);
+        if (isVoiceOutputEnabled) SpeechService.speak("Added pest check task", { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+        return;
     }
   };
 
@@ -457,7 +502,7 @@ export const CalendarTodoScreen: React.FC<{ navigation: any }> = ({ navigation }
         <Text style={styles.headerTitle}>Calendar & Tasks</Text>
         <View style={{ flex: 1 }} />
         <VoiceRecordButton 
-          onRecordingComplete={() => {}}
+          onRecordingComplete={handleVoiceComplete}
           onSpeechEnd={handleVoiceText}
           onSpeechPartial={() => {}}
           onSpeechStart={() => {}}

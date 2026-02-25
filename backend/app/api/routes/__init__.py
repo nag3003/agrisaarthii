@@ -29,6 +29,10 @@ router.include_router(query.router, prefix="/query", tags=["Query"])
 
 
 
+@router.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
 @router.get("/alerts/predictive")
 async def get_alerts(farmer_id: str = "f-123"):
     return await predictive_service.PredictiveIntelligence.generate_emergent_alerts(farmer_id)

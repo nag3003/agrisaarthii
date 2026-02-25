@@ -1,22 +1,47 @@
 import { Platform } from 'react-native';
 import { logger } from '../utils/logger';
 
-export const API_BASE = (() => {
+export let API_BASE = (() => {
   if (Platform.OS === 'web') {
-    // For web, use the hosted backend URL (Serveo tunnel or deployed backend)
-    return "https://ecc15d4ba01f71.lhr.life/api";
+    // Check if we are running on a specific host (like a tunnel or LAN IP)
+    const host = window.location.hostname;
+    const protocol = window.location.protocol;
+    
+    // If running on localhost, use localhost:8000
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return "http://localhost:8000/api";
+    }
+    
+    // If running on a tunnel or specific IP, try to guess the backend is on the same host but port 8000
+    return `${protocol}//${host}:8000/api`;
   }
-  // Only use Env var for Native/Production builds if needed
+  
+  // Native/Mobile fallback
   if (process.env.EXPO_PUBLIC_BACKEND_URL) {
     return `${process.env.EXPO_PUBLIC_BACKEND_URL}/api`;
   }
-  return "http://10.212.10.29:8000/api"; // Fallback to LAN IP
+  
+  // Try to use a common local IP or let the user configure it via UI
+  return "http://localhost:8000/api"; 
 })();
+
+export const getApiBase = () => API_BASE;
+export const setApiBase = (url: string) => {
+  API_BASE = url.replace(/\/$/, '');
+  if (!API_BASE.endsWith('/api')) {
+    API_BASE += '/api';
+  }
+  console.log('[API] Base URL updated to:', API_BASE);
+};
 
 /**
  * Enhanced fetch wrapper with error handling and logging
  */
 async function safeFetch(url: string, options: RequestInit = {}) {
+  // If url is relative (starts with /), prepend API_BASE
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE}${url}`;
+  console.log(`[API] Fetching: ${fullUrl}`, options.method || 'GET');
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
@@ -26,7 +51,7 @@ async function safeFetch(url: string, options: RequestInit = {}) {
       'bypass-tunnel-reminder': 'true',
     };
     
-    const res = await fetch(url, { 
+    const res = await fetch(fullUrl, { 
       ...options, 
       headers,
       signal: controller.signal 
@@ -36,17 +61,17 @@ async function safeFetch(url: string, options: RequestInit = {}) {
 
     if (!res.ok) {
       const errorText = await res.text().catch(() => 'No error body');
-      logger.warn('API', `Request failed: ${url}`, { status: res.status, error: errorText });
+      logger.warn('API', `Request failed: ${fullUrl}`, { status: res.status, error: errorText });
       throw new Error(`HTTP error! status: ${res.status}`);
     }
     return res;
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-      logger.debug('API', `Request aborted or timed out: ${url}`);
+      logger.debug('API', `Request aborted or timed out: ${fullUrl}`);
       throw new Error('Connection timed out. Please check your internet or tunnel.');
     } else {
-      logger.error('API', `Fetch failed: ${url}`, { error: error.message });
+      logger.error('API', `Fetch failed: ${fullUrl}`, { error: error.message });
     }
     throw error;
   }
@@ -54,9 +79,14 @@ async function safeFetch(url: string, options: RequestInit = {}) {
 
 export async function checkHealth() {
   try {
-    const res = await safeFetch(`${API_BASE}/health`);
+    const res = await fetch(`${API_BASE}/health`, {
+      // Avoid AbortController to prevent net::ERR_ABORTED noise in DevTools
+      cache: 'no-cache',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return { status: "offline" };
     return res.json();
-  } catch (error) {
+  } catch {
     return { status: "offline" };
   }
 }
@@ -106,41 +136,44 @@ export async function sendVoice(audioUri: string) {
       console.log('[API] Sending voice data to backend at:', uploadUrl);
       
       // DIRECT FETCH (Bypassing safeFetch to avoid header issues with FormData)
-      const res = await fetch(uploadUrl, {
-        method: "POST",
-        body: formData,
-        headers: {
-            // DO NOT set Content-Type here, let browser set it with boundary for FormData
-            'Accept': 'application/json',
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
+      try {
+        console.log('[API] Sending request to:', uploadUrl);
+        const res = await fetch(uploadUrl, {
+            method: "POST",
+            body: formData,
+            headers: {
+                // DO NOT set Content-Type here, let browser set it with boundary for FormData
+                'Accept': 'application/json',
+                'bypass-tunnel-reminder': 'true',
+            },
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!res.ok) {
+            const errorText = await res.text();
+            console.error('[API] Voice transcribe failed:', res.status, errorText);
+            throw new Error(`Server error: ${res.status}`);
         }
-      });
-      
-      if (!res.ok) {
-          const errorText = await res.text();
-          console.error('[API] Voice transcribe failed:', res.status, errorText);
-          if (Platform.OS === 'web') alert(`Server Error ${res.status}: ${errorText}`);
-          throw new Error(`Server error: ${res.status}`);
+        
+        const json = await res.json();
+        console.log('[API] Transcription success:', json);
+        return json;
+      } catch (err: any) {
+          clearTimeout(timeoutId);
+          if (err.name === 'AbortError') {
+              throw new Error('Upload timed out (15s)');
+          }
+          throw err;
       }
-      
-      const json = await res.json();
-      console.log('[API] Transcription success:', json);
-      return json;
   } catch (error: any) {
               console.error('[API] sendVoice Error:', error);
               if (Platform.OS === 'web') alert(`Upload Failed to ${uploadUrl}: ${error.message}\nCheck console for details.`);
               throw error;
           }
-}
-
-export async function askJarvis(text: string) {
-  const res = await safeFetch(`${API_BASE}/query/jarvis`, {
-    method: "POST",
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ text }),
-  });
-  return res.json();
 }
 
 export async function getAdvice(text: string, context: any = {}) {

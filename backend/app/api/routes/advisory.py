@@ -1,9 +1,24 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from app.services.ai_service import AIService
+from app.services.advice_service import AdvisoryReasoningEngine
 from typing import Optional
 
 router = APIRouter()
 
+@router.post("/query/advice")
+async def text_advice(request: dict):
+    """
+    Text-based advice endpoint.
+    Accepts { text, context } and returns actionable farming advice.
+    """
+    query = request.get("text", "")
+    context = request.get("context", {})
+
+    if not query:
+        raise HTTPException(status_code=400, detail="Query text is required")
+
+    result = await AdvisoryReasoningEngine.get_actionable_advice(query, context)
+    return {"advice": result}
 @router.post("/query/voice")
 async def voice_query(
     audio: UploadFile = File(...),

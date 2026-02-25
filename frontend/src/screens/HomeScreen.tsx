@@ -10,6 +10,7 @@ import {
   Modal,
   AppState,
   Alert,
+  TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ImagePickerService } from '../services/imagePicker';
@@ -18,7 +19,6 @@ import { SpeechService } from '../services/speech';
 // import * as Speech from 'expo-speech';
 
 import { VoiceRecordButton } from '../components/VoiceRecordButton';
-import { OfflineIndicator } from '../components/OfflineIndicator';
 import { TopicCard } from '../components/TopicCard';
 import { Logo } from '../components/Logo';
 
@@ -32,13 +32,14 @@ import {
   diagnoseCrop,
   getMarketPrices,
   getLocationData,
-  askJarvis,
+  setApiBase,
+  getApiBase,
 } from '../services/api';
+import { getGeminiAdvice } from '../services/geminiAdvice';
 
 import { Storage } from '../services/storage';
 import { db } from '../services/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore/lite';
-import { AuthService } from '../services/auth';
 import { ProfileService, UserProfile } from '../services/profile';
 import { useAuth } from '../context/AuthContext';
 
@@ -53,7 +54,6 @@ const MemoTopicCard = memo(TopicCard);
 import { LocationService } from '../services/location';
 import { processLocalCommand } from '../utils/voiceCommandHelper';
 import { VoiceAssistant } from '../components/VoiceAssistant';
-import { AppView } from '../types';
 
 export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { user, logout, role } = useAuth();
@@ -66,17 +66,20 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [processingVoice, setProcessingVoice] = useState(false);
   const [isVoiceOutputEnabled, setIsVoiceOutputEnabled] = useState(true);
   const [showVoiceAssistant, setShowVoiceAssistant] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   const [lastAdvice, setLastAdvice] = useState<any>(null);
   const [displayedAdviceText, setDisplayedAdviceText] = useState<string>(''); // For streaming text effect
   const [lastQuestion, setLastQuestion] = useState<string | null>(null);
   const [listeningText, setListeningText] = useState<string>('');
+  const [queryText, setQueryText] = useState<string>(''); // For text-based queries
 
   const [diagnosing, setDiagnosing] = useState(false);
   const [diagnosisResult, setDiagnosisResult] = useState<any>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const [marketPrices, setMarketPrices] = useState<any[]>([]);
   const [todos, setTodos] = useState<any[]>([]);
+  const [customApiUrl, setCustomApiUrl] = useState(getApiBase());
 
   /* ----------------------------------------
      LOAD DATA
@@ -96,7 +99,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         if (gps) {
           try {
             const unifiedData = await getLocationData(gps.lat, gps.lon);
-            
+
             // Update Location Name (District, State)
             if (unifiedData && unifiedData.location) {
               const dist = unifiedData.location.district || 'Your';
@@ -121,24 +124,24 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             // 2. Fetch Market Prices (Unified + Top Crops)
             const crops = ['Wheat', 'Rice', 'Soyabean'];
             const marketResults = [];
-            
+
             if (unifiedData && unifiedData.market && !unifiedData.market.message) {
-               marketResults.push({
-                 crop: unifiedData.market.commodity || 'Crop',
-                 avg_price: unifiedData.market.modal_price && unifiedData.market.modal_price !== '0' ? unifiedData.market.modal_price : '2450',
-                 trend: Math.random() > 0.5 ? 'up' : 'down'
-               });
+              marketResults.push({
+                crop: unifiedData.market.commodity || 'Crop',
+                avg_price: unifiedData.market.modal_price && unifiedData.market.modal_price !== '0' ? unifiedData.market.modal_price : '2450',
+                trend: Math.random() > 0.5 ? 'up' : 'down'
+              });
             }
 
             const currentDistrict = unifiedData?.location?.district || 'India';
             const missingCrops = crops.filter(c => !marketResults.find(m => m.crop === c));
-            
+
             if (missingCrops.length > 0) {
               try {
                 const extraResults = await Promise.all(
                   missingCrops.map(crop => getMarketPrices(crop, currentDistrict).catch(() => ({ crop, avg_price: "2400", trend: "stable" })))
                 );
-                
+
                 marketResults.push(...extraResults.map((r, i) => ({
                   crop: r.crop || missingCrops[i],
                   avg_price: r.avg_price && r.avg_price !== '0' ? r.avg_price : (missingCrops[i] === 'Wheat' ? '2350' : missingCrops[i] === 'Rice' ? '4800' : '4450'),
@@ -148,7 +151,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 console.warn('Extra market fetch failed', err);
               }
             }
-            
+
             setMarketPrices(marketResults.slice(0, 3));
 
             // 3. Fetch Todos for Summary
@@ -179,7 +182,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     };
 
     loadData();
-    
+
     // Add an event listener for profile updates if possible, or just re-run on focus
     const unsubscribe = navigation.addListener('focus', () => {
       loadData();
@@ -227,18 +230,18 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           'en': 'en-IN'
         };
         const locale = langMap[farmer?.language || 'hi'] || 'hi-IN';
-        
+
         // Use streaming text for Siri-like effect
-        setDisplayedAdviceText(''); 
-        
+        setDisplayedAdviceText('');
+
         SpeechService.speak(text, {
           language: locale,
           pitch: 1.05,
           rate: 1.0,
           onBoundary: (event: any) => {
             if (event.name === 'word') {
-                const charIndex = event.charIndex + (event.charLength || 0);
-                setDisplayedAdviceText(text.substring(0, charIndex + 1));
+              const charIndex = event.charIndex + (event.charLength || 0);
+              setDisplayedAdviceText(text.substring(0, charIndex + 1));
             }
           },
           onDone: () => setDisplayedAdviceText(text)
@@ -302,117 +305,164 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   };
 
   const processQuery = async (text: string) => {
-    if (!text) return;
-    setLastQuestion(text);
+    if (!text || text.trim() === '') return;
 
-    const adviceRes = await getAdvice(text, {
+    // Check for navigation commands first (e.g. "open tasks", "open weather", "profile")
+    const wasCommand = handleVoiceCommand(text);
+    if (wasCommand) return;
+
+    setLastQuestion(text);
+    setProcessingVoice(true);
+
+    // Local help handler — respond immediately with all features
+    const helpKeywords = ['help', 'what can you do', 'features', 'how can you help', 'what do you do', 'guide me', 'assist', 'options', 'menu'];
+    const lower = text.toLowerCase();
+    if (helpKeywords.some(kw => lower.includes(kw))) {
+      const helpText = `Hello ${farmer?.name || 'Farmer'}! I'm AgriSarathi, your AI farming assistant. Here's what I can do:\n\n🌾 Crop Advice — pest control, diseases, fertilizers, irrigation\n📸 AI Crop Doctor — photograph crops for disease diagnosis\n🌤️ Weather Forecast — real-time weather & farm risk analysis\n📊 Market Prices — latest mandi prices near you\n🧮 Farm Calculator — seed, fertilizer & cost calculations\n📅 Task Planner — farming reminders & calendar\n🏛️ Government Schemes — agricultural subsidies & schemes\n🔧 Machinery — equipment info & rental\n🎤 Voice Commands — tap the mic and speak!\n\nTry asking: "My tomato leaves are curling" or "What is the price of wheat?"`;
+      const helpAdvice = { advice: helpText, id: 'help', confidence: 1.0, reasoning: 'User asked for help' };
+      setLastAdvice(helpAdvice);
+      setDisplayedAdviceText(helpText);
+      if (isVoiceOutputEnabled) {
+        SpeechService.speak(helpText, { language: farmer?.language === 'hi' ? 'hi-IN' : 'en-US' });
+      }
+      setProcessingVoice(false);
+      return;
+    }
+
+    const queryContext = {
       crop: farmer?.primaryCrop,
       landSize: farmer?.landSize,
       irrigation: farmer?.irrigationType,
       risk: farmer?.riskLevel,
-      language: farmer?.language || 'hi', // Pass user language to backend
-    });
+      language: farmer?.language || 'hi',
+    };
 
-    if (adviceRes && adviceRes.advice) {
-      console.log('[HomeScreen] Received advice:', adviceRes.advice);
-      setLastAdvice(adviceRes.advice);
-      await Storage.cacheAdvice(text, adviceRes.advice.advice);
+    try {
+      let adviceData: any = null;
 
-      if (isVoiceOutputEnabled && adviceRes.advice.advice) {
-        console.log('[HomeScreen] Triggering voice output...');
-        await SpeechService.stop();
-        
-        const adviceText = adviceRes.advice.advice;
-        
-        if (!adviceText) {
-          console.warn('[HomeScreen] Advice text is empty, skipping voice output');
-          return;
+      // Try backend first, fall back to Gemini if backend is down
+      if (!isBackendDown) {
+        try {
+          const adviceRes = await getAdvice(text, queryContext);
+          if (adviceRes && adviceRes.advice) {
+            adviceData = adviceRes.advice;
+          }
+        } catch (backendErr) {
+          console.warn('[HomeScreen] Backend failed, falling back to Gemini:', backendErr);
         }
-        
-        // Use streaming text logic
-        setDisplayedAdviceText('');
-        SpeechService.speak(adviceText, {
-          language: farmer?.language || 'hi',
-          pitch: 1.05,
-          rate: 1.0,
-          onBoundary: (event: any) => {
-             if (event.name === 'word') {
-                 const charIndex = event.charIndex + (event.charLength || 0);
-                 setDisplayedAdviceText(adviceText.substring(0, charIndex + 1));
-             }
-          },
-          onDone: () => setDisplayedAdviceText(adviceText)
-        });
-      } else {
-        // If voice disabled, show full text immediately
-        setDisplayedAdviceText(adviceRes.advice.advice);
       }
+
+      // Fallback: use frontend Gemini API directly
+      if (!adviceData) {
+        console.log('[HomeScreen] Using Gemini fallback...');
+        const geminiRes = await getGeminiAdvice(text, queryContext);
+        adviceData = geminiRes;
+      }
+
+      if (adviceData && adviceData.advice) {
+        console.log('[HomeScreen] Received advice:', adviceData);
+        setLastAdvice(adviceData);
+        await Storage.cacheAdvice(text, adviceData.advice);
+
+        const adviceText = adviceData.advice;
+
+        if (isVoiceOutputEnabled && adviceText) {
+          console.log('[HomeScreen] Triggering voice output...');
+          await SpeechService.stop();
+
+          setDisplayedAdviceText('');
+          setIsSpeaking(true);
+          SpeechService.speak(adviceText, {
+            language: farmer?.language || 'hi',
+            pitch: 1.05,
+            rate: 1.0,
+            onBoundary: (event: any) => {
+              if (event.name === 'word') {
+                const charIndex = event.charIndex + (event.charLength || 0);
+                setDisplayedAdviceText(adviceText.substring(0, charIndex + 1));
+              }
+            },
+            onDone: () => {
+              setDisplayedAdviceText(adviceText);
+              setIsSpeaking(false);
+            },
+            onError: () => setIsSpeaking(false)
+          });
+        } else {
+          setDisplayedAdviceText(adviceText || "I analyzed your query but have no specific advice at the moment.");
+        }
+      } else {
+        throw new Error('No advice received');
+      }
+    } catch (error: any) {
+      console.error('[HomeScreen] processQuery error:', error);
+      setLastAdvice({
+        advice: "Connection error. Please try again later.",
+        id: 'err-conn',
+        confidence: 0,
+        reasoning: error.message
+      });
+      setDisplayedAdviceText("Connection error. Please try again later.");
+    } finally {
+      setProcessingVoice(false);
+    }
+  };
+
+  const handleTextQuery = () => {
+    if (queryText.trim()) {
+      const text = queryText;
+      setQueryText(''); // Clear input
+      processQuery(text);
+    }
+  };
+
+  const checkConnection = async () => {
+    const health = await checkHealth();
+    setIsBackendDown(health.status !== 'ok');
+    if (health.status === 'ok') {
+      Alert.alert("Connected!", "Server is reachable.");
     } else {
-      throw new Error('No advice received');
+      Alert.alert("Connection Failed", "Server is still unreachable. Check URL or network.");
     }
   };
 
   const handleVoiceQuery = async (uri: string) => {
     // Prime speech service immediately on user gesture to avoid browser blocking
     if (isVoiceOutputEnabled) {
-      SpeechService.speak("", { volume: 0 }); 
+      SpeechService.speak("", { volume: 0 });
     }
-    
+
     setProcessingVoice(true);
     try {
+      console.log('[HomeScreen] Sending voice URI to server:', uri);
       const result = await sendVoice(uri);
-        
-        // If result is null or text is empty, handle gracefully
-        const recognizedText = result?.text;
-        
-        if (!recognizedText) {
-            console.warn('Voice Query: No text recognized');
-            Alert.alert('Did not catch that', 'Please try speaking again clearly.');
-            setProcessingVoice(false);
-            return;
-        }
-        
-        setListeningText(recognizedText);
-      
-      // Check for local navigation commands first
-      if (handleVoiceCommand(recognizedText)) {
-        setListeningText('');
+
+      // If result is null or text is empty, handle gracefully
+      const recognizedText = result?.text;
+
+      if (!recognizedText) {
+        console.warn('Voice Query: No text recognized (empty result)');
+        Alert.alert('Did not catch that', 'Please try speaking again clearly.');
         setProcessingVoice(false);
         return;
       }
 
-      // Use Jarvis for voice queries
-      const res = await askJarvis(recognizedText);
-      setListeningText(''); // Clear query so answer shows
+      console.log('[HomeScreen] Recognized Text:', recognizedText);
+      setListeningText(recognizedText);
+      setDisplayedAdviceText('Thinking...');
 
-      if (res && res.response) {
-        const jarvisAdvice = {
-          advice: res.response,
-          confidence: 100,
-          reasoning: "Jarvis AI Assistant",
-          id: `jarvis-${Date.now()}`
-        };
-        setLastAdvice(jarvisAdvice);
-        
-        if (isVoiceOutputEnabled) {
-           // Reset for streaming
-           setDisplayedAdviceText('');
-           SpeechService.speak(res.response, {
-             language: farmer?.language || 'hi',
-             pitch: 1.05,
-             rate: 1.0,
-             onBoundary: (event: any) => {
-                if (event.name === 'word') {
-                    const charIndex = event.charIndex + (event.charLength || 0);
-                    setDisplayedAdviceText(res.response.substring(0, charIndex + 1));
-                }
-             },
-             onDone: () => setDisplayedAdviceText(res.response)
-           });
-        } else {
-           setDisplayedAdviceText(res.response);
-        }
+      // Check for local navigation commands first
+      if (handleVoiceCommand(recognizedText)) {
+        setListeningText('');
+        setDisplayedAdviceText('');
+        setProcessingVoice(false);
+        return;
       }
+
+      // Use regular advice engine for voice queries
+      console.log('[HomeScreen] Calling Advice Engine with text:', recognizedText);
+      await processQuery(recognizedText);
+      setListeningText(''); // Clear query so answer shows
     } catch (err: any) {
       console.error('Voice Query Error:', err);
       Alert.alert('AI Error', 'Unable to process voice right now. Please check your connection or try again.');
@@ -424,41 +474,25 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const handleVoiceText = async (text: string) => {
     // Prime speech service immediately
     if (isVoiceOutputEnabled) {
-      SpeechService.speak("", { volume: 0 }); 
+      SpeechService.speak("", { volume: 0 });
     }
 
     setProcessingVoice(true);
     setListeningText(text); // Show final text
+    setDisplayedAdviceText('Thinking...'); // Show status while waiting for AI
     try {
       // Check for local navigation commands first
       if (handleVoiceCommand(text)) {
         setListeningText('');
+        setDisplayedAdviceText('');
         setProcessingVoice(false);
         return;
       }
 
-      // Use Jarvis for voice queries (Siri-like experience)
-      const res = await askJarvis(text);
+      // Use regular advice engine for voice text
+      console.log('[HomeScreen] Calling Advice Engine with text:', text);
+      await processQuery(text);
       setListeningText(''); // Clear query so answer shows
-      
-      if (res && res.response) {
-        // Map Jarvis string response to advice object format for UI compatibility
-        const jarvisAdvice = {
-          advice: res.response,
-          confidence: 100,
-          reasoning: "Jarvis AI Assistant",
-          id: `jarvis-${Date.now()}`
-        };
-        setLastAdvice(jarvisAdvice);
-        
-        if (isVoiceOutputEnabled) {
-           SpeechService.speak(res.response, {
-             language: farmer?.language || 'hi',
-             pitch: 1.0,
-             rate: 0.9,
-           });
-        }
-      }
     } catch (err: any) {
       console.error('Voice Text Error:', err);
       Alert.alert('AI Error', 'Unable to process voice command.');
@@ -537,15 +571,15 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       >
         {/* HEADER */}
         <View style={styles.header}>
-          <Logo 
+          <Logo
             containerStyle={{ position: 'absolute', left: 0, right: 0, zIndex: -1 }}
             iconSize={22}
             textStyle={{ fontSize: 18 }}
           />
           <View style={{ flex: 1 }} />
           <View style={styles.headerIcons}>
-            <TouchableOpacity 
-              style={[styles.voiceToggle, isVoiceOutputEnabled && styles.voiceToggleActive]} 
+            <TouchableOpacity
+              style={[styles.voiceToggle, isVoiceOutputEnabled && styles.voiceToggleActive]}
               onPress={() => {
                 const newState = !isVoiceOutputEnabled;
                 setIsVoiceOutputEnabled(newState);
@@ -556,49 +590,34 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 }
               }}
             >
-              <Ionicons 
-                name={isVoiceOutputEnabled ? "volume-high" : "volume-mute"} 
-                size={22} 
-                color={isVoiceOutputEnabled ? "#27AE60" : "#666"} 
+              <Ionicons
+                name={isVoiceOutputEnabled ? "volume-high" : "volume-mute"}
+                size={22}
+                color={isVoiceOutputEnabled ? "#27AE60" : "#666"}
               />
             </TouchableOpacity>
             <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('Profile')}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text 
-                style={styles.headerUserName} 
-                numberOfLines={1} 
-                ellipsizeMode="tail"
-              >
-                {(farmer?.name || user?.displayName || 'User').split(' ')[0]}
-              </Text>
-              {farmer?.photoURL ? (
-                <Image source={{ uri: farmer.photoURL }} style={styles.profileAvatar} />
-              ) : (
-                <Ionicons name="person-circle-outline" size={32} color="#27AE60" />
-              )}
-            </View>
-          </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text
+                  style={styles.headerUserName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {(farmer?.name || user?.displayName || 'User').split(' ')[0]}
+                </Text>
+                {farmer?.photoURL ? (
+                  <Image source={{ uri: farmer.photoURL }} style={styles.profileAvatar} />
+                ) : (
+                  <Ionicons name="person-circle-outline" size={32} color="#27AE60" />
+                )}
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* PRIORITY CARD */}
-        {priorityAlert && (
-          <View style={styles.priorityCard}>
-            <View style={styles.priorityHeader}>
-              <Ionicons name="alert-circle" size={20} color="#27AE60" />
-              <Text style={styles.priorityLabel}>TODAY’S PRIORITY</Text>
-            </View>
-            <Text style={styles.priorityTitle}>{priorityAlert.title}</Text>
-            <Text style={styles.priorityDesc}>{priorityAlert.message}</Text>
-            <TouchableOpacity style={styles.priorityAction}>
-              <Text style={styles.priorityActionText}>Take Action</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* HERO */}
         <View style={styles.hero}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.heroProfileLink}
             onPress={() => navigation.navigate('Profile')}
           >
@@ -617,13 +636,100 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             onSpeechEnd={handleVoiceText}
             onSpeechPartial={(text) => setListeningText(text)}
             onSpeechStart={() => {
-               setListeningText('');
-               setLastAdvice(null);
+              setListeningText('');
+              setLastAdvice(null);
             }}
             isProcessing={processingVoice}
-            size={110}
+            size={100}
             language={farmer?.language === 'hi' ? 'hi-IN' : 'en-US'}
           />
+
+          <View style={{ width: '100%', paddingHorizontal: 20, marginTop: 15 }}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: 'white',
+              borderRadius: 25,
+              borderWidth: 1,
+              borderColor: '#E0E0E0',
+              paddingHorizontal: 15,
+              paddingVertical: 5,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 3,
+              elevation: 2
+            }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  height: 40,
+                  fontSize: 16,
+                  color: '#333'
+                }}
+                placeholder={farmer?.language === 'hi' ? "सवाल पूछें..." : "Ask a question..."}
+                value={queryText}
+                onChangeText={setQueryText}
+                onSubmitEditing={handleTextQuery}
+                returnKeyType="send"
+              />
+              <TouchableOpacity
+                onPress={handleTextQuery}
+                disabled={!queryText.trim()}
+                style={{
+                  padding: 8,
+                  opacity: queryText.trim() ? 1 : 0.3
+                }}
+              >
+                <Ionicons name="send" size={24} color="#27AE60" />
+              </TouchableOpacity>
+            </View>
+          </View>
+          {isBackendDown && (
+            <View style={{ alignItems: 'center', width: '100%', paddingHorizontal: 20, marginBottom: 10 }}>
+              <TouchableOpacity onPress={checkConnection} style={{ width: '100%' }}>
+                <View style={{ marginTop: 10, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="warning" size={20} color="#D32F2F" style={{ marginRight: 8 }} />
+                  <Text style={{ color: '#D32F2F', fontWeight: 'bold' }}>Server Disconnected (Tap to Retry)</Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={{ marginTop: 10, width: '100%', flexDirection: 'row', alignItems: 'center' }}>
+                <TextInput
+                  style={{
+                    flex: 1,
+                    backgroundColor: 'white',
+                    borderWidth: 1,
+                    borderColor: '#ddd',
+                    borderRadius: 8,
+                    padding: 8,
+                    marginRight: 8,
+                    fontSize: 12,
+                    color: '#333'
+                  }}
+                  placeholder="http://192.168.1.x:8000/api"
+                  value={customApiUrl}
+                  onChangeText={setCustomApiUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={{ backgroundColor: '#27AE60', padding: 8, borderRadius: 8 }}
+                  onPress={() => {
+                    if (customApiUrl) {
+                      setApiBase(customApiUrl);
+                      checkConnection();
+                    }
+                  }}
+                >
+                  <Text style={{ color: 'white', fontSize: 12, fontWeight: 'bold' }}>Update</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={{ fontSize: 10, color: '#666', marginTop: 4, textAlign: 'center' }}>
+                Enter your computer's IP if running locally (e.g. http://192.168.1.5:8000)
+              </Text>
+            </View>
+          )}
           {listeningText ? (
             <View style={{ marginTop: 20, paddingHorizontal: 20, width: '100%', alignItems: 'center' }}>
               <Text style={{ fontSize: 18, color: '#333', textAlign: 'center', fontWeight: '500' }}>
@@ -632,7 +738,13 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             </View>
           ) : lastAdvice && (
             <View style={{ marginTop: 20, paddingHorizontal: 20, width: '100%', alignItems: 'center' }}>
-              <Text style={{ fontSize: 16, fontStyle: 'italic', color: '#555', textAlign: 'center' }}>
+              {isSpeaking && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                  <Ionicons name="volume-medium" size={24} color="#3498DB" />
+                  <Text style={{ marginLeft: 8, color: '#3498DB', fontWeight: 'bold' }}>AI is speaking...</Text>
+                </View>
+              )}
+              <Text style={{ fontSize: 16, fontStyle: 'italic', color: isSpeaking ? '#3498DB' : '#555', textAlign: 'center' }}>
                 "{displayedAdviceText || lastAdvice.advice}"
               </Text>
             </View>
@@ -673,10 +785,10 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <View style={styles.healthCard}>
             <View style={styles.healthMain}>
               <View style={[styles.healthBadge, { backgroundColor: (iotStatus?.status === 'optimal' || !iotStatus) ? '#E8F5E9' : '#FFF3E0' }]}>
-                <Ionicons 
-                  name={(iotStatus?.status === 'optimal' || !iotStatus) ? "checkmark-circle" : "warning"} 
-                  size={24} 
-                  color={(iotStatus?.status === 'optimal' || !iotStatus) ? "#2E7D32" : "#E65100"} 
+                <Ionicons
+                  name={(iotStatus?.status === 'optimal' || !iotStatus) ? "checkmark-circle" : "warning"}
+                  size={24}
+                  color={(iotStatus?.status === 'optimal' || !iotStatus) ? "#2E7D32" : "#E65100"}
                 />
                 <Text style={[styles.healthStatus, { color: (iotStatus?.status === 'optimal' || !iotStatus) ? "#2E7D32" : "#E65100" }]}>
                   {(iotStatus?.status === 'optimal' || !iotStatus) ? "Healthy" : "Needs Attention"}
@@ -709,24 +821,24 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             <Text style={styles.sectionTitle}>Essential Tools</Text>
             {todos.length > 0 && (
               <TouchableOpacity onPress={() => navigation.navigate('CalendarTodo')}>
-                 <Text style={[styles.seeAll, { color: '#7B1FA2' }]}>{todos.length} Pending</Text>
+                <Text style={[styles.seeAll, { color: '#7B1FA2' }]}>{todos.length} Pending</Text>
               </TouchableOpacity>
             )}
           </View>
-          
+
           {todos.length > 0 && (
             <View style={styles.todoSummary}>
-               {todos.map((todo, idx) => (
-                 <TouchableOpacity 
-                   key={idx} 
-                   style={styles.todoMiniItem}
-                   onPress={() => navigation.navigate('CalendarTodo')}
-                 >
-                   <View style={[styles.priorityDot, { backgroundColor: todo.priority === 'high' ? '#FF5252' : todo.priority === 'medium' ? '#F57C00' : '#27AE60' }]} />
-                   <Text style={styles.todoMiniText} numberOfLines={1}>{todo.text}</Text>
-                   <Text style={styles.todoMiniDate}>{todo.date.split('-').slice(1).join('/')}</Text>
-                 </TouchableOpacity>
-               ))}
+              {todos.map((todo, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={styles.todoMiniItem}
+                  onPress={() => navigation.navigate('CalendarTodo')}
+                >
+                  <View style={[styles.priorityDot, { backgroundColor: todo.priority === 'high' ? '#FF5252' : todo.priority === 'medium' ? '#F57C00' : '#27AE60' }]} />
+                  <Text style={styles.todoMiniText} numberOfLines={1}>{todo.text}</Text>
+                  <Text style={styles.todoMiniDate}>{todo.date.split('-').slice(1).join('/')}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           )}
 
@@ -800,44 +912,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </View>
         )}
 
-        {/* LAST ADVICE / QUESTION (ENHANCED CHATBOT UI) */}
-        {(lastQuestion || lastAdvice) && (
-          <View style={styles.chatSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>AI Assistant</Text>
-              <TouchableOpacity onPress={() => { setLastQuestion(null); setLastAdvice(null); }}>
-                <Text style={styles.seeAll}>Clear</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.chatContainer}>
-              {lastQuestion && (
-                <View style={styles.userBubble}>
-                  <Text style={styles.userText}>{lastQuestion}</Text>
-                  <Ionicons name="person" size={12} color="#666" style={{ marginLeft: 8, alignSelf: 'flex-end' }} />
-                </View>
-              )}
-              {lastAdvice && (
-                <View style={styles.aiBubble}>
-                  <View style={styles.aiHeader}>
-                    <Logo iconSize={14} textStyle={{ fontSize: 12 }} />
-                    <TouchableOpacity onPress={() => handleSpeech(lastAdvice.advice || lastAdvice)}>
-                      <Ionicons name="volume-high" size={16} color="#27AE60" />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={styles.aiText}>{displayedAdviceText || lastAdvice.advice || lastAdvice}</Text>
-                  <View style={styles.aiActions}>
-                    <TouchableOpacity style={styles.aiActionBtn} onPress={() => Alert.alert('Action', 'Applying recommendation...')}>
-                      <Text style={styles.aiActionText}>Apply Now</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.aiActionBtnSecondary} onPress={() => navigation.navigate('CalendarTodo')}>
-                      <Text style={styles.aiActionTextSecondary}>Remind Me</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-            </View>
-          </View>
-        )}
+
 
 
 
@@ -855,10 +930,10 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <Text style={styles.marketMiniLabel}>{item.crop}</Text>
                 <Text style={styles.marketMiniPrice}>₹{item.avg_price}</Text>
                 <View style={[styles.miniTrend, { backgroundColor: item.trend === 'up' ? '#E8F5E9' : '#FFEBEE' }]}>
-                  <Ionicons 
-                    name={item.trend === 'up' ? "trending-up" : "trending-down"} 
-                    size={12} 
-                    color={item.trend === 'up' ? "#27AE60" : "#FF5252"} 
+                  <Ionicons
+                    name={item.trend === 'up' ? "trending-up" : "trending-down"}
+                    size={12}
+                    color={item.trend === 'up' ? "#27AE60" : "#FF5252"}
                   />
                   <Text style={[styles.miniTrendText, { color: item.trend === 'up' ? "#27AE60" : "#FF5252" }]}>
                     {item.trend === 'up' ? '+2.4%' : '-1.2%'}
@@ -904,11 +979,11 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <Text style={styles.tipTitle}>Seasonal Tip</Text>
             </View>
             <Text style={styles.tipText}>
-              {weather.temp > 35 
+              {weather.temp > 35
                 ? "Extreme heat detected. Ensure light irrigation in the evening to protect roots from heat stress."
                 : weather.humidity > 80
-                ? "High humidity increases fungal risk. Check leaf undersides for white spots."
-                : "Perfect weather for top-dressing! Apply Urea or NPK for better vegetative growth."}
+                  ? "High humidity increases fungal risk. Check leaf undersides for white spots."
+                  : "Perfect weather for top-dressing! Apply Urea or NPK for better vegetative growth."}
             </Text>
           </View>
         </View>
@@ -973,6 +1048,8 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         onBack={() => setShowVoiceAssistant(false)}
         onNavigate={(view) => navigation.navigate(view)}
         profile={farmer}
+        isBackendDown={isBackendDown}
+        onRetryConnection={checkConnection}
       />
     </SafeAreaView>
   );

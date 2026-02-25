@@ -102,13 +102,10 @@ const linking = {
 
 function Main() {
   const { user, role, loading } = useAuth();
-  // FORCE ONLINE TRUE for Web Debugging
+  // FORCE ONLINE TRUE for Web Debugging (Cleaned up)
   const [isOnline, setIsOnline] = useState(true);
   
-  const [currentRouteName, setCurrentRouteName] = useState('Unknown');
-
   useEffect(() => {
-    // FORCE ONLINE ON WEB to avoid false offline detection
     if (Platform.OS === 'web') {
       setIsOnline(true);
       return;
@@ -124,7 +121,6 @@ function Main() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5FDF9' }}>
-        <Text style={{ marginTop: 20 }}>Loading App (v4)...</Text>
         <ActivityIndicator size="large" color="#27AE60" />
       </View>
     );
@@ -144,11 +140,11 @@ function Main() {
   }
 
   return (
-    <SafeAreaProvider style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: 'white' }}>
         <NavigationContainer
           ref={navigationRef}
           linking={linking} 
-          fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><Text>Loading Route...</Text></View>}
+          fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator color="#27AE60" /></View>}
         >
         <StatusBar style="light" />
         {user ? (
@@ -157,14 +153,14 @@ function Main() {
           <AuthStack key="login-stack" initialRoute="Login" />
         )}
       </NavigationContainer>
-    </SafeAreaProvider>
+    </View>
   );
 }
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <SafeAreaProvider>
+      <SafeAreaProvider style={{ flex: 1 }}>
         <AuthProvider>
           <ToastProvider>
             <Main />

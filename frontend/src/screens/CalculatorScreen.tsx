@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Storage } from '../services/storage';
+import { sendVoice } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ProfileService } from '../services/profile';
 import { VoiceRecordButton } from '../components/VoiceRecordButton';
@@ -73,13 +74,97 @@ export const CalculatorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
     });
   };
 
+  const handleVoiceComplete = async (uri: string) => {
+    if (isVoiceOutputEnabled) {
+      SpeechService.speak("", { volume: 0 }); 
+    }
+
+    setProcessingVoice(true);
+    try {
+        const response = await sendVoice(uri);
+        if (response && response.text) {
+            handleVoiceText(response.text);
+        }
+    } catch (error) {
+        console.error('Failed to process voice', error);
+        Alert.alert("Error", "Failed to process voice command.");
+    } finally {
+        setProcessingVoice(false);
+    }
+  };
+
   const handleVoiceText = (text: string) => {
     if (handleVoiceCommand(text)) return;
     
-    // Calculator specific commands
-    // Simple math parsing could be added here, but for now just acknowledge
+    const lower = text.toLowerCase();
+    
+    // Farmer Calculator Commands
+    if (lower.includes('seed') && lower.includes('acre')) {
+        const numbers = text.match(/\d+(\.\d+)?/g);
+        if (numbers && numbers.length > 0) {
+            setActiveTab('farmer');
+            setFarmerCalcType('seed');
+            setInputs({ ...inputs, area: numbers[0], rate: numbers[1] || '10' }); // Default rate if not provided
+            if (isVoiceOutputEnabled) SpeechService.speak(`Setting up seed calculator for ${numbers[0]} acres`, { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+            return;
+        }
+    }
+
+    if (lower.includes('fertilizer') && lower.includes('acre')) {
+        const numbers = text.match(/\d+(\.\d+)?/g);
+        if (numbers && numbers.length > 0) {
+            setActiveTab('farmer');
+            setFarmerCalcType('fertilizer');
+            setInputs({ ...inputs, area: numbers[0], n: '120', p: '60', k: '40' }); // Default NPK
+            if (isVoiceOutputEnabled) SpeechService.speak(`Setting up fertilizer calculator for ${numbers[0]} acres`, { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+            return;
+        }
+    }
+
+    if (lower.includes('convert') || (lower.includes('acre') && lower.includes('hectare'))) {
+        const numbers = text.match(/\d+(\.\d+)?/g);
+        if (numbers && numbers.length > 0) {
+            setActiveTab('farmer');
+            setFarmerCalcType('units');
+            setUnitType('acres_to_hectares');
+            setInputs({ ...inputs, value: numbers[0] });
+            calculateFarmer(); // Auto calculate
+            if (isVoiceOutputEnabled) SpeechService.speak(`Converting ${numbers[0]} acres to hectares`, { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+            return;
+        }
+    }
+
+    // Standard Calculator Logic (Simple parsing)
+    // "5 plus 3", "10 minus 2", "50 times 5", "100 divided by 10"
+    try {
+        let expr = lower.replace('plus', '+')
+                       .replace('minus', '-')
+                       .replace('times', '*')
+                       .replace('multiplied by', '*')
+                       .replace('divided by', '/')
+                       .replace('x', '*');
+        
+        // Remove non-math characters except digits and operators
+        expr = expr.replace(/[^-+*/%0-9.]/g, '');
+        
+        if (expr.length > 0 && /\d/.test(expr)) {
+             // Safe eval for simple math
+             // eslint-disable-next-line no-eval
+             const result = eval(expr); 
+             if (!isNaN(result)) {
+                 setActiveTab('standard');
+                 setDisplay(String(result));
+                 setHistory(prev => [{ expression: text, result: String(result) }, ...prev].slice(0, 50));
+                 if (isVoiceOutputEnabled) SpeechService.speak(`The result is ${result}`, { language: language === 'hi' ? 'hi-IN' : 'en-US' });
+                 return;
+             }
+        }
+    } catch (e) {
+        console.log("Voice calc error", e);
+    }
+
     if (isVoiceOutputEnabled) {
-       SpeechService.speak(`I heard ${text}, but I can only perform calculations manually for now.`, { 
+       SpeechService.speak(`I heard ${text}, but I couldn't calculate that. Try saying '5 plus 3' or 'seed for 10 acres'.`, { 
          language: language === 'hi' ? 'hi-IN' : 'en-US' 
        });
     }
@@ -456,7 +541,7 @@ export const CalculatorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ marginRight: 10 }}>
             <VoiceRecordButton
-              onRecordingComplete={() => {}}
+              onRecordingComplete={handleVoiceComplete}
               onSpeechEnd={handleVoiceText}
               onSpeechPartial={() => {}}
               onSpeechStart={() => {}}

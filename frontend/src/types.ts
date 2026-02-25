@@ -14,5 +14,9 @@ export enum AppView {
   Profile = 'Profile',
   CalendarTodo = 'CalendarTodo',
   AgriJobs = 'AgriJobs',
-  Videos = 'Videos'
+  Videos = 'Videos',
+  WorkerHome = 'WorkerHome',
+  LandownerHome = 'LandownerHome',
+  Login = 'Login',
+  Onboarding = 'Onboarding'
 }

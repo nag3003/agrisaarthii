@@ -145,20 +145,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     });
 
-    // Safety timeout: If firebase takes too long or fails silently, stop loading
-    const timer = setTimeout(() => {
+    // Fallback timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
       setLoading((prev) => {
         if (prev) {
-          console.warn("AuthContext: Auth check timed out, forcing loading false");
+          console.warn("AuthContext: Auth check timed out, forcing loading=false");
           return false;
         }
         return prev;
       });
-    }, 15000);
+    }, 5000);
 
     return () => {
       unsubscribe();
-      clearTimeout(timer);
+      clearTimeout(timeout);
     };
   }, []);
 

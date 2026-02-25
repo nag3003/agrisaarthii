@@ -11,8 +11,25 @@ if (!fs.existsSync(indexPath)) {
 
 let html = fs.readFileSync(indexPath, 'utf8');
 
-// 1. Inject Error Handling Script
-const errorScript = `
+// 0. Inject Base Tag (CRITICAL for GitHub Pages Subdirectory)
+// For local development on localhost:8090, we don't need a base path.
+// For production on GitHub Pages (/agrisaarthii/), we do.
+// We detect if we should use the base path by checking if we are in a 'deploy' context or specific flag
+const USE_SUBPATH = process.argv.includes('--use-subpath') || process.env.USE_SUBPATH === 'true';
+const BASE_URL = USE_SUBPATH ? '/agrisaarthii' : '';
+
+if (!html.includes('<base href') && BASE_URL) {
+  html = html.replace('<head>', `<head><base href="${BASE_URL}/" />`);
+}
+
+// Ensure all assets use the correct path
+if (!USE_SUBPATH) {
+  // If not using subpath, strip it from all hardcoded links/scripts
+  html = html.split('/agrisaarthii/').join('/');
+}
+
+// 1. Inject Error Handler (Always first to catch early errors)
+const errorHandler = `
 <script>
   window.addEventListener('error', function(e) {
     const root = document.getElementById('root');
@@ -20,69 +37,53 @@ const errorScript = `
     
     // Check if it's a script loading error
     if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-      root.innerHTML = '<div style="padding:20px;color:red;font-family:monospace"><h3>Asset Load Error</h3><p>Failed to load: ' + (e.target.src || e.target.href) + '</p><p>BaseURI: ' + document.baseURI + '</p></div>';
-      return;
+       // Ignore for now or log quietly
+       console.warn('Asset Load Error:', e.target.src || e.target.href);
+       return;
     }
-    
+
     // Runtime Error
     if (e.message) {
-      root.innerHTML += '<div style="padding:20px;color:red;font-family:monospace;border-top:1px solid #ccc"><h3>Runtime Error</h3><p>' + e.message + '</p></div>';
+      console.error('Runtime Error:', e.message);
     }
   }, true);
-  
 </script>
 `;
+html = html.replace('</body>', errorHandler + '</body>');
 
-// Insert invalidating text to be sure we are seeing new version
-const loadingSpinner = `<div id="root" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-size:18px;font-family:system-ui;">
+// 2. Inject Simple Loading UI (White background)
+const loadingSpinner = `<div id="root" style="display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;font-size:18px;font-family:system-ui;background-color:white;">
   <div style="font-size:40px;margin-bottom:20px;">🚜</div>
-  <div>Loading Agri... (v3)</div>
-  <div style="font-size:12px;color:#666;margin-top:10px;">Initializing...</div>
+  <div>Loading AgriSaarthii...</div>
 </div>`;
 
-// Replace root div
 html = html.replace('<div id="root"></div>', loadingSpinner);
 
-// Insert error script before closing body
-html = html.replace('</body>', errorScript + '</body>');
-
-// 2. Inject Base Tag for Subdirectory Support
-// This is crucial for assets to load correctly in a subdirectory (e.g. /agrisaarthii/)
-const BASE_URL = '/agrisaarthii';
-if (!html.includes('<base href')) {
-  html = html.replace('<head>', `<head><base href="${BASE_URL}/" />`);
-}
-
-// 4. Inject Global CSS for React Native Web Layout
+// 3. Inject Global CSS for React Native Web Layout (Minimal)
 const styleFix = `
 <style>
-  html, body, #root {
+  html, body {
     height: 100%;
     width: 100%;
     margin: 0;
     padding: 0;
-    display: flex; /* Critical for flex: 1 to work */
+    overflow: hidden; /* Let RN handle scrolling */
+    background-color: white;
+  }
+  #root {
+    height: 100%;
+    width: 100%;
+    display: flex;
     flex-direction: column;
   }
-  /* Ensure no scrollbars on body, let RN handle scrolling */
-    body {
-      overflow: hidden;
-      background-color: #8aeebcff; /* Match app background */
-    }
-  </style>
+</style>
 `;
 html = html.replace('</head>', styleFix + '</head>');
 
-// 5. Fix asset paths for GitHub Pages subdirectory
-// With baseUrl: '/agrisaarthii' in app.json, paths are already absolute (/agrisaarthii/...)
-// We only need to fix favicon if it's not handled correctly
-// html = html.replace(/src="\//g, 'src="');
-// html = html.replace(/href="\/favicon.ico"/g, 'href="favicon.ico"');
+// 4. Inject cache busting for scripts
+html = html.replace(/(src=".*\/_expo\/static\/js\/web\/.*?)(")/g, '$1?v=' + Date.now() + '$2');
 
-// Inject cache busting for scripts
-// html = html.replace(/(src=".*\/_expo\/static\/js\/web\/.*?)(")/g, '$1?v=' + Date.now() + '$2');
-
-// 6. SPA Redirect Handling for GitHub Pages
+// 5. SPA Redirect Handling for GitHub Pages
 // This solves the issue where refreshing a sub-route causes a 404
 const spaRedirectScript = `
 <script type="text/javascript">
@@ -104,9 +105,9 @@ const spaRedirectScript = `
 html = html.replace('<head>', '<head>' + spaRedirectScript);
 
 fs.writeFileSync(indexPath, html);
-console.log('Post-export processing complete: Injected error handler, loading UI, and SPA redirect script.');
+console.log('Post-export processing complete: Injected base tag, error handler, loading UI, CSS fixes, and SPA redirect script.');
 
-// 7. Generate a smart 404.html for SPA redirection
+// 6. Generate a smart 404.html for SPA redirection
 const notFoundHtml = `<!DOCTYPE html>
 <html>
   <head>

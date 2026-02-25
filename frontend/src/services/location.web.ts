@@ -16,16 +16,36 @@ export class LocationService {
                 (error) => {
                     console.error("Error getting web location:", error);
                     resolve(null);
-                }
+                },
+                { timeout: 10000, enableHighAccuracy: false }
             );
         });
     }
 
     static async getReverseGeocode(lat: number, lon: number): Promise<{ city: string | null, district: string | null, state: string | null }> {
-        // Web reverse geocoding often requires an external API key (Google Maps, OpenStreetMap)
-        // expo-location's reverseGeocodeAsync might work on web if configured, but to stay safe and avoid key issues:
-        // We will return null or a placeholder for now, or use a simple free fetch if critical.
-        // For debugging blank page, returning null is safest.
-        return { city: null, district: null, state: null };
+        try {
+            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10`;
+            const res = await fetch(url, {
+                headers: { 'User-Agent': 'agrisaarthi-app' },
+            });
+
+            if (!res.ok) {
+                console.error('[Location] Nominatim error:', res.status);
+                return { city: null, district: null, state: null };
+            }
+
+            const data = await res.json();
+            const address = data.address || {};
+
+            const district = address.county || address.district || address.city || address.town || null;
+            const state = address.state || null;
+            const city = address.city || address.town || address.village || null;
+
+            console.log(`[Location] Reverse geocode: ${district}, ${state}`);
+            return { city, district, state };
+        } catch (err) {
+            console.error('[Location] Reverse geocode failed:', err);
+            return { city: null, district: null, state: null };
+        }
     }
 }

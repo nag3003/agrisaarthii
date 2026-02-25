@@ -65,7 +65,7 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         if (isVoiceOutputEnabled) {
             SpeechService.speak("", { volume: 0 });
         }
-        
+
         setProcessingVoice(true);
         try {
             const response = await sendVoice(uri);
@@ -75,6 +75,7 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
             }
         } catch (error) {
             console.error('Failed to process voice', error);
+            Alert.alert("Voice Error", "Failed to process voice command. Please check your connection.");
         } finally {
             setProcessingVoice(false);
         }
@@ -85,37 +86,144 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
             SpeechService.speak("", { volume: 0 });
         }
         if (handleVoiceCommand(text)) return;
+
+        const lower = text.toLowerCase();
+
+        // Camera/Gallery Commands
+        if (lower.includes('camera') || lower.includes('photo') || lower.includes('picture') || lower.includes('capture')) {
+            pickImage('camera');
+            return;
+        }
+
+        if (lower.includes('gallery') || lower.includes('upload') || lower.includes('album')) {
+            pickImage('gallery');
+            return;
+        }
+
+        if (lower.includes('analyze') || lower.includes('diagnose') || lower.includes('check') || lower.includes('scan')) {
+            if (image) {
+                analyzeImage();
+            } else {
+                if (isVoiceOutputEnabled) SpeechService.speak("Please take a photo first", { language: farmer?.language || 'hi' });
+            }
+            return;
+        }
+
         setDescription(prev => prev ? `${prev} ${text}` : text);
     };
 
     const pickImage = async (source: 'camera' | 'gallery') => {
         console.log(`[CropDoctor] Button pressed: ${source}`);
         try {
-            // Permission handling (Mobile only)
-            if (Platform.OS !== 'web') {
-                const permission = source === 'camera' 
-                    ? await ImagePicker.requestCameraPermissionsAsync()
-                    : await ImagePicker.requestMediaLibraryPermissionsAsync();
-                
-                if (permission.status !== 'granted') {
-                    Alert.alert("Permission Required", `We need ${source} access to scan crops.`);
+            // --- WEB: use native browser APIs ---
+            if (Platform.OS === 'web') {
+                if (source === 'camera') {
+                    // Use browser getUserMedia to access webcam
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({
+                            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }
+                        });
+
+                        const video = document.createElement('video');
+                        video.srcObject = stream;
+                        video.setAttribute('playsinline', 'true');
+                        await video.play();
+
+                        // Wait for video to be ready
+                        await new Promise<void>(resolve => {
+                            if (video.readyState >= 2) { resolve(); return; }
+                            video.onloadeddata = () => resolve();
+                        });
+
+                        // Create overlay UI for camera preview
+                        const overlay = document.createElement('div');
+                        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+
+                        video.style.cssText = 'max-width:100%;max-height:80%;object-fit:contain;border-radius:8px;';
+                        overlay.appendChild(video);
+
+                        const btnRow = document.createElement('div');
+                        btnRow.style.cssText = 'margin-top:16px;display:flex;gap:20px;';
+
+                        const captureBtn = document.createElement('button');
+                        captureBtn.textContent = '📸 Capture';
+                        captureBtn.style.cssText = 'background:#27AE60;color:#fff;border:none;padding:14px 36px;border-radius:30px;font-size:18px;font-weight:bold;cursor:pointer;';
+
+                        const cancelBtn = document.createElement('button');
+                        cancelBtn.textContent = '✕ Cancel';
+                        cancelBtn.style.cssText = 'background:#666;color:#fff;border:none;padding:14px 28px;border-radius:30px;font-size:16px;cursor:pointer;';
+
+                        btnRow.appendChild(captureBtn);
+                        btnRow.appendChild(cancelBtn);
+                        overlay.appendChild(btnRow);
+                        document.body.appendChild(overlay);
+
+                        const imageUri = await new Promise<string | null>((resolve) => {
+                            captureBtn.onclick = () => {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = video.videoWidth;
+                                canvas.height = video.videoHeight;
+                                canvas.getContext('2d')?.drawImage(video, 0, 0);
+                                resolve(canvas.toDataURL('image/jpeg', 0.85));
+                            };
+                            cancelBtn.onclick = () => resolve(null);
+                        });
+
+                        // Cleanup
+                        stream.getTracks().forEach(t => t.stop());
+                        document.body.removeChild(overlay);
+
+                        if (imageUri) {
+                            console.log('[CropDoctor] Captured from webcam');
+                            setImage(imageUri);
+                        }
+                        return;
+                    } catch (camErr: any) {
+                        console.error('[CropDoctor] Webcam error:', camErr);
+                        Alert.alert("Camera Error", "Could not access your camera. Make sure you've allowed camera permissions in your browser.");
+                        return;
+                    }
+                } else {
+                    // Gallery: use file input on web
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = 'image/*';
+                    input.onchange = (e: any) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                setImage(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    };
+                    input.click();
                     return;
                 }
             }
 
+            // --- NATIVE: use expo-image-picker ---
+            const permission = source === 'camera'
+                ? await ImagePicker.requestCameraPermissionsAsync()
+                : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+            if (permission.status !== 'granted') {
+                Alert.alert("Permission Required", `We need ${source} access to scan crops.`);
+                return;
+            }
+
             const options: ImagePicker.ImagePickerOptions = {
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: Platform.OS !== 'web',
+                allowsEditing: true,
                 aspect: [4, 3],
                 quality: 0.7,
             };
 
             let result;
             if (source === 'camera') {
-                // This will open the real-time camera on both phone and laptop (webcam)
                 result = await ImagePicker.launchCameraAsync(options);
             } else {
-                // This opens the gallery on phone or file selector on laptop
                 result = await ImagePicker.launchImageLibraryAsync(options);
             }
 
@@ -128,12 +236,7 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
             }
         } catch (error) {
             console.error('[CropDoctor] Image Picking Error:', error);
-            // On some web environments, the picker might fail due to iframe restrictions
-            if (Platform.OS === 'web') {
-                Alert.alert("Browser Restriction", "Your browser might be blocking the file picker. Please try refreshing or using a different browser.");
-            } else {
-                Alert.alert("Error", "Could not open camera or gallery. Please try again.");
-            }
+            Alert.alert("Error", "Could not open camera or gallery. Please try again.");
         }
     };
 
@@ -149,10 +252,10 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         try {
             const response = await diagnoseCrop(image, description);
             console.log('[CropDoctor] Diagnosis Response:', response);
-            
+
             if (response && (response.diagnosis || response.remedy)) {
                 setResult(response);
-                
+
                 // Voice output for diagnosis
                 if (isVoiceOutputEnabled) {
                     const textToSpeak = `${response.diagnosis}. ${response.remedy}`;
@@ -192,17 +295,17 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>AI Crop Doctor</Text>
                 <View style={{ flex: 1 }} />
-                <VoiceRecordButton 
-                  onRecordingComplete={() => {}}
-                  onSpeechEnd={handleVoiceText}
-                  onSpeechPartial={() => {}}
-                  onSpeechStart={() => {}}
-                  isProcessing={processingVoice}
-                  size={36}
-                  language={farmer?.language === 'hi' ? 'hi-IN' : 'en-US'}
+                <VoiceRecordButton
+                    onRecordingComplete={handleVoiceComplete}
+                    onSpeechEnd={handleVoiceText}
+                    onSpeechPartial={() => { }}
+                    onSpeechStart={() => { }}
+                    isProcessing={processingVoice}
+                    size={36}
+                    language={farmer?.language === 'hi' ? 'hi-IN' : 'en-US'}
                 />
-                <TouchableOpacity 
-                    style={[styles.voiceToggle, isVoiceOutputEnabled && styles.voiceToggleActive]} 
+                <TouchableOpacity
+                    style={[styles.voiceToggle, isVoiceOutputEnabled && styles.voiceToggleActive]}
                     onPress={() => {
                         const newState = !isVoiceOutputEnabled;
                         setIsVoiceOutputEnabled(newState);
@@ -213,16 +316,16 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                         }
                     }}
                 >
-                    <Ionicons 
-                        name={isVoiceOutputEnabled ? "volume-high" : "volume-mute"} 
-                        size={22} 
-                        color={isVoiceOutputEnabled ? "#27AE60" : "#666"} 
+                    <Ionicons
+                        name={isVoiceOutputEnabled ? "volume-high" : "volume-mute"}
+                        size={22}
+                        color={isVoiceOutputEnabled ? "#27AE60" : "#666"}
                     />
                 </TouchableOpacity>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                
+
                 {/* Upload Section */}
                 <View style={styles.uploadArea}>
                     {image ? (
@@ -235,8 +338,8 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                     ) : (
                         <View style={styles.placeholderContainer}>
                             <View style={styles.pickerRow}>
-                                <TouchableOpacity 
-                                    style={styles.pickerCard} 
+                                <TouchableOpacity
+                                    style={styles.pickerCard}
                                     onPress={() => pickImage('camera')}
                                     activeOpacity={0.7}
                                 >
@@ -246,8 +349,8 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                                     <Text style={[styles.pickerText, { color: '#27AE60' }]}>Take Photo</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity 
-                                    style={[styles.pickerCard, { borderColor: '#E3F2FD' }]} 
+                                <TouchableOpacity
+                                    style={[styles.pickerCard, { borderColor: '#E3F2FD' }]}
                                     onPress={() => pickImage('gallery')}
                                     activeOpacity={0.7}
                                 >
@@ -258,10 +361,10 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                                 </TouchableOpacity>
                             </View>
                             <Text style={styles.uploadHint}>Capture or Upload Photo (JPG, PNG)</Text>
-                            
+
                             {Platform.OS === 'web' && (
-                                <TouchableOpacity 
-                                    style={styles.demoBtn} 
+                                <TouchableOpacity
+                                    style={styles.demoBtn}
                                     onPress={() => setImage('https://images.unsplash.com/photo-1597362925123-77861d3fbac7?q=80&w=400')}
                                 >
                                     <Text style={styles.demoBtnText}>Try with Sample Image</Text>
@@ -283,7 +386,7 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                 </View>
 
                 <View style={styles.voiceInputArea}>
-                    <VoiceRecordButton 
+                    <VoiceRecordButton
                         onRecordingComplete={handleVoiceComplete}
                         onSpeechEnd={(text) => {
                             handleVoiceText(text);
@@ -297,7 +400,7 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
                     />
                     <View style={styles.inputWrapper}>
                         {listeningText ? (
-                             <Text style={{ fontStyle: 'italic', color: '#666', marginBottom: 5 }}>{listeningText}</Text>
+                            <Text style={{ fontStyle: 'italic', color: '#666', marginBottom: 5 }}>{listeningText}</Text>
                         ) : null}
                         <TextInput
                             style={styles.textInput}
@@ -312,8 +415,8 @@ export const CropDoctorScreen: React.FC<{ navigation: any }> = ({ navigation }) 
 
                 {/* Submit Button */}
                 {!result && !analyzing && (
-                    <TouchableOpacity 
-                        style={[styles.submitBtn, !image && styles.submitBtnDisabled]} 
+                    <TouchableOpacity
+                        style={[styles.submitBtn, !image && styles.submitBtnDisabled]}
                         onPress={analyzeImage}
                         disabled={!image || analyzing}
                     >

@@ -19,43 +19,43 @@ export const processLocalCommand = (text: string, options: VoiceCommandOptions):
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Crop Doctor", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('soil') || lower.includes('nutrient')) {
     navigation.navigate('SoilHealth');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Soil Health", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('market') || lower.includes('price') || lower.includes('mandi')) {
     navigation.navigate('MarketPrice');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Market Prices", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('weather') || lower.includes('forecast') || lower.includes('rain')) {
-    navigation.navigate('Weather'); 
+    navigation.navigate('Weather');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Weather Forecast", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('task') || lower.includes('todo') || lower.includes('calendar') || lower.includes('schedule')) {
     navigation.navigate('CalendarTodo');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Tasks", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('calculator') || lower.includes('calculate')) {
     navigation.navigate('Calculator');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Calculator", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('scheme') || lower.includes('government') || lower.includes('yojana')) {
     navigation.navigate('GovSchemes');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Government Schemes", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('machinery') || lower.includes('tractor') || lower.includes('tool')) {
     navigation.navigate('Machinery');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Machinery", { language: lang });
@@ -67,7 +67,7 @@ export const processLocalCommand = (text: string, options: VoiceCommandOptions):
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Agri Jobs Marketplace", { language: lang });
     return true;
   }
-  
+
   if (lower.includes('video') || lower.includes('tutorial') || lower.includes('learn') || lower.includes('watch')) {
     navigation.navigate('Videos');
     if (isVoiceOutputEnabled) SpeechService.speak("Opening Farming Videos", { language: lang });
@@ -100,17 +100,14 @@ export const processLocalCommand = (text: string, options: VoiceCommandOptions):
     return true;
   }
 
-  if (lower.includes('help') || lower.includes('what can i say') || lower.includes('commands')) {
-    const helpText = "You can say: Home, Crop Doctor, Soil Health, Market Prices, Weather, Tasks, Calculator, Schemes, Machinery, Profile, or Logout.";
-    if (isVoiceOutputEnabled) SpeechService.speak(helpText, { language: lang });
-    return true;
-  }
-  
+  // "help" / "commands" is handled by processQuery with the full feature list
+  // so we do NOT intercept it here — let it fall through
+
   // Action Commands
   if ((lower.includes('logout') || lower.includes('sign out')) && onLogout) {
     onLogout();
     return true;
   }
-  
+
   return false;
 };

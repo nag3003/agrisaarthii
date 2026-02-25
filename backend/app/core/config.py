@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     WEATHER_API_KEY: str = "placeholder"
     OPENWEATHER_API_KEY: str = "placeholder"
     DATA_GOV_API_KEY: str = "placeholder"
-    GROQ_API_KEY: str = "placeholder"  # Added Groq key
 
     class Config:
         env_file = ".env"

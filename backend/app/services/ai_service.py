@@ -1,152 +1,164 @@
-import openai
-from fastapi import UploadFile
+"""
+AI Service — Audio transcription and advice using Google Gemini.
+Falls back to Google STT / mock when Gemini key is missing.
+"""
 import os
-import sys
+import base64
+import httpx
+from fastapi import UploadFile
 from app.core.config import settings
 
-# Add backend root to path to allow importing AgriMic
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 
-try:
-    # Try importing from root (if running as module) or relative
-    try:
-        from AgriMic import AgriMic
-    except ImportError:
-        import sys
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
-        from AgriMic import AgriMic
-except ImportError as e:
-    # Fallback if import fails (e.g. strict environment)
-    print(f"Warning: Could not import AgriMic. Using fallback transcription. Error: {e}")
-    AgriMic = None
+GEMINI_API_KEY = settings.GEMINI_API_KEY if settings.GEMINI_API_KEY not in ("placeholder", "") else os.getenv("GEMINI_API_KEY", "")
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
-# Initialize OpenAI
-openai.api_key = settings.OPENAI_API_KEY
+# Mapping of extensions to MIME types for Gemini
+AUDIO_MIME_MAP = {
+    ".webm": "audio/webm",
+    ".ogg": "audio/ogg",
+    ".wav": "audio/wav",
+    ".mp3": "audio/mp3",
+    ".m4a": "audio/mp4",
+    ".mp4": "audio/mp4",
+    ".flac": "audio/flac",
+}
+
 
 class AIService:
     @staticmethod
     async def transcribe_audio(file: UploadFile) -> str:
-        """
-        Convert Voice (Hindi/Regional) to English Text using AgriMic (Whisper/Google)
-        """
+        """Transcribe audio using Gemini multimodal, falling back to SpeechRecognition."""
+        temp_filename = None
         try:
             # Save temp file
-            # Ensure we keep the extension for AgriMic/Whisper to detect format
-            ext = os.path.splitext(file.filename)[1]
-            if not ext:
-                ext = ".m4a" # Default for mobile uploads if missing
-                
+            ext = os.path.splitext(file.filename or "")[1] or ".webm"
             temp_filename = f"temp_{os.urandom(4).hex()}{ext}"
-            
-            with open(temp_filename, "wb") as buffer:
-                buffer.write(await file.read())
-            
-            # Use AgriMic for transcription (Printing logs as requested)
-            if AgriMic:
-                mic = AgriMic()
-                text = mic.transcribe_file(temp_filename)
-            else:
-                # Fallback if AgriMic not imported
-                print("🎙️ Agri is listening... (Fallback)")
-                
-                # Check if API key is a placeholder or missing
-                if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY in ["sk-placeholder", "sk-your-key-here"]:
-                    print("Warning: OpenAI API Key is missing and AgriMic not loaded. Using dynamic mock for demo.")
-                    mock_queries = [
-                        "My tomato crop has white spots on leaves.",
-                        "How much water does rice need in summer?",
-                        "Pest attack in my cotton field.",
-                        "Wheat crop turning yellow what to do?",
-                        "Best fertilizer for pomegranate."
-                    ]
-                    import random
-                    return random.choice(mock_queries)
 
-                print("🧠 Processing speech...")
-                with open(temp_filename, "rb") as audio_file:
-                    transcript = openai.Audio.transcribe(
-                        model="whisper-1", 
-                        file=audio_file,
-                        prompt="The audio is about Indian agriculture farming queries."
-                    )
-                text = transcript["text"]
-                print(f"User said: {text}")
+            content = await file.read()
+            with open(temp_filename, "wb") as f:
+                f.write(content)
 
-            # Cleanup
-            if os.path.exists(temp_filename):
-                os.remove(temp_filename)
-            
-            return text
-            
+            file_size = len(content)
+            print(f"[AIService] Received file: {file.filename}, size: {file_size} bytes, ext: {ext}")
+
+            if file_size == 0:
+                print("[AIService] Empty audio file received")
+                return ""
+
+            # ---- Attempt 1: Gemini multimodal transcription ----
+            if GEMINI_API_KEY:
+                try:
+                    audio_b64 = base64.b64encode(content).decode("utf-8")
+                    mime = AUDIO_MIME_MAP.get(ext.lower(), "audio/webm")
+
+                    async with httpx.AsyncClient(timeout=20) as client:
+                        resp = await client.post(
+                            f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+                            json={
+                                "contents": [{
+                                    "parts": [
+                                        {
+                                            "inline_data": {
+                                                "mime_type": mime,
+                                                "data": audio_b64,
+                                            }
+                                        },
+                                        {
+                                            "text": "Transcribe this audio accurately. Return ONLY the transcribed text, nothing else. The audio may be in Hindi, English, Telugu, Tamil, or other Indian languages."
+                                        },
+                                    ]
+                                }],
+                                "generationConfig": {
+                                    "temperature": 0.1,
+                                    "maxOutputTokens": 200,
+                                },
+                            },
+                        )
+
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        text = (
+                            data.get("candidates", [{}])[0]
+                            .get("content", {})
+                            .get("parts", [{}])[0]
+                            .get("text", "")
+                            .strip()
+                        )
+                        if text:
+                            print(f"[AIService] Gemini transcription: {text}")
+                            return text
+                        else:
+                            print("[AIService] Gemini returned empty text, trying fallback")
+                    else:
+                        print(f"[AIService] Gemini transcription error: {resp.status_code}")
+                except Exception as e:
+                    print(f"[AIService] Gemini transcription exception: {e}")
+
+            # ---- Attempt 2: SpeechRecognition (Google STT free tier) ----
+            try:
+                import speech_recognition as sr
+                # Try pydub conversion for non-wav formats
+                wav_path = temp_filename
+                converted = False
+                try:
+                    import static_ffmpeg
+                    static_ffmpeg.add_paths()
+                    from pydub import AudioSegment
+                    audio_seg = AudioSegment.from_file(temp_filename)
+                    if len(audio_seg) < 300:  # < 0.3s
+                        print("[AIService] Audio too short")
+                        return ""
+                    wav_path = temp_filename + ".wav"
+                    audio_seg = audio_seg.set_frame_rate(16000).set_channels(1)
+                    audio_seg.export(wav_path, format="wav")
+                    converted = True
+                except Exception as conv_err:
+                    print(f"[AIService] Audio conversion failed: {conv_err}")
+                    if not temp_filename.lower().endswith(".wav"):
+                        return ""
+
+                recognizer = sr.Recognizer()
+                recognizer.energy_threshold = 300
+                with sr.AudioFile(wav_path) as source:
+                    audio_data = recognizer.record(source)
+                    text = recognizer.recognize_google(audio_data, language="hi-IN")
+                    print(f"[AIService] Google STT: {text}")
+
+                if converted and os.path.exists(wav_path):
+                    os.remove(wav_path)
+
+                return text or ""
+            except Exception as stt_err:
+                print(f"[AIService] SpeechRecognition fallback failed: {stt_err}")
+
+            # ---- Attempt 3: Return empty (let frontend handle) ----
+            return ""
+
         except Exception as e:
-            print(f"AgriMic Error: {e}")
-            error_str = str(e).lower()
-            if "api key" in error_str or "authentication" in error_str:
-                 print("OpenAI API Key invalid. Using dynamic mock for demo.")
-                 mock_queries = [
-                    "My tomato crop has white spots on leaves.",
-                    "How much water does rice need in summer?",
-                    "Pest attack in my cotton field.",
-                    "Wheat crop turning yellow what to do?",
-                    "Best fertilizer for pomegranate."
-                ]
-                 import random
-                 return random.choice(mock_queries)
-            return f"[ERROR: {str(e)}]"
+            print(f"[AIService] Error: {e}")
+            return ""
+        finally:
+            if temp_filename and os.path.exists(temp_filename):
+                os.remove(temp_filename)
 
     @staticmethod
     async def get_farming_advice(query_text: str, context: str = "") -> str:
-        """
-        Get actionable advice using GPT-4o-mini
-        """
-        try:
-            # Check if API key is a placeholder
-            if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY == "sk-placeholder":
-                print("Warning: OpenAI API Key is missing or placeholder. Using fallback.")
-                return f"I've received your query about {query_text}. Please check your plants for pests and ensure proper irrigation."
+        """Get farming advice using Gemini."""
+        if GEMINI_API_KEY:
+            try:
+                async with httpx.AsyncClient(timeout=15) as client:
+                    resp = await client.post(
+                        f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+                        json={
+                            "system_instruction": {"parts": [{"text": "You are an expert Indian agricultural scientist. Answer in the same language as the user. Keep it short (max 3 sentences). Provide specific actions."}]},
+                            "contents": [{"parts": [{"text": f"Context: {context}\nQuestion: {query_text}"}]}],
+                            "generationConfig": {"temperature": 0.7, "maxOutputTokens": 150},
+                        },
+                    )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            except Exception as e:
+                print(f"[AIService] Gemini advice error: {e}")
 
-            response = openai.ChatCompletion.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": "You are an expert Indian agricultural scientist. Answer in the same language as the user's question. If the user asks in Hindi, answer in Hindi. If in Tamil, answer in Tamil. Keep it short (max 3 sentences). Provide very specific actions."
-                    },
-                    {"role": "user", "content": f"Context: {context}\nQuestion: {query_text}"}
-                ],
-                max_tokens=150
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            print(f"LLM Error: {e}")
-            return "Based on your symptoms, it looks like Early Blight. Spray Mancozeb 2.5g/liter of water."
-
-    @staticmethod
-    async def generate_audio_response(text: str, language: str = "hi") -> str:
-        """
-        Convert Text back to Audio (TTS)
-        Returns: URL or Base64 of audio
-        """
-        # In a real app, use Google Cloud TTS or Azure TTS here
-        # For MVP, we return a mock URL
-        return "https://agrisarathi-storage.s3.ap-south-1.amazonaws.com/responses/sample_response.mp3"
-
-    @staticmethod
-    async def analyze_crop_image(image_file: UploadFile) -> dict:
-        """
-        Analyze crop image using the Intelligence module
-        """
-        from app.services.ai.intelligence import ImageAnalysis
-        
-        # Save temp file for analysis (since Intelligence expects a path for now)
-        temp_filename = f"temp_{image_file.filename}"
-        with open(temp_filename, "wb") as buffer:
-            buffer.write(await image_file.read())
-            
-        try:
-            result = await ImageAnalysis.analyze_crop_disease(temp_filename)
-        finally:
-            if os.path.exists(temp_filename):
-                os.remove(temp_filename)
-                
-        return result
+        return f"I've received your query about {query_text}. Please check your plants for pests and ensure proper irrigation."

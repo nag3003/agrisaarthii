@@ -1,5 +1,5 @@
 import * as Speech from 'expo-speech';
-import { Platform } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 
 export const SpeechService = {
     speak: async (text: string, options: Speech.SpeechOptions = {}) => {
@@ -43,9 +43,18 @@ export const SpeechService = {
             console.error('[SpeechService] Exception in speak:', error);
         }
     },
+    beep: async (frequency: number = 1000, duration: number = 120, volume: number = 0.08) => {
+        if (Platform.OS === 'web') return;
+        Vibration.vibrate(duration);
+    },
     stop: async () => {
         console.log('[SpeechService] Stop called');
         return Speech.stop();
+    },
+    restart: async () => {
+        console.log('[SpeechService] Restart called');
+        await Speech.stop();
+        // Native restart can just be a stop for now
     },
     isSpeakingAsync: async () => {
         return Speech.isSpeakingAsync();
