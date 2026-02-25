@@ -73,10 +73,15 @@ const AppStack = ({ role }) => {
   );
 };
 
+// Detect if running on GitHub Pages subdirectory
+const IS_GITHUB_PAGES = Platform.OS === 'web' && typeof window !== 'undefined' &&
+  window.location.hostname.includes('github.io');
+const BASE_PATH = IS_GITHUB_PAGES ? '/agrisaarthii' : '';
+
 const linking = {
   prefixes: [
     'https://nag3003.github.io/agrisaarthii',
-    Linking.createURL('/'), // Localhost fallback
+    Linking.createURL('/'),
   ],
   config: {
     screens: {
@@ -98,13 +103,47 @@ const linking = {
       Videos: 'videos',
     },
   },
+  // Strip base path so React Navigation can match routes
+  getInitialURL() {
+    if (Platform.OS !== 'web') return Linking.getInitialURL();
+    const url = window.location.href;
+    // Strip the base path from the URL for route matching
+    if (BASE_PATH && url.includes(BASE_PATH)) {
+      const origin = window.location.origin;
+      const pathAfterBase = window.location.pathname.replace(BASE_PATH, '') || '/';
+      return origin + pathAfterBase + window.location.search + window.location.hash;
+    }
+    return url;
+  },
+  subscribe(listener: (url: string) => void) {
+    if (Platform.OS !== 'web') {
+      const sub = Linking.addEventListener('url', ({ url }) => listener(url));
+      return () => sub.remove();
+    }
+    // Listen for popstate (browser back/forward)
+    const onPopState = () => {
+      const pathAfterBase = window.location.pathname.replace(BASE_PATH, '') || '/';
+      listener(window.location.origin + pathAfterBase + window.location.search);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  },
+  // Prepend base path when generating URLs for the browser address bar
+  getPathFromState(state: any, options: any) {
+    const { getPathFromState: defaultGetPath } = require('@react-navigation/native');
+    const path = defaultGetPath(state, options);
+    if (Platform.OS === 'web' && BASE_PATH) {
+      return BASE_PATH + path;
+    }
+    return path;
+  },
 };
 
 function Main() {
   const { user, role, loading } = useAuth();
   // FORCE ONLINE TRUE for Web Debugging (Cleaned up)
   const [isOnline, setIsOnline] = useState(true);
-  
+
   useEffect(() => {
     if (Platform.OS === 'web') {
       setIsOnline(true);
@@ -141,11 +180,11 @@ function Main() {
 
   return (
     <View style={{ flex: 1, backgroundColor: 'white' }}>
-        <NavigationContainer
-          ref={navigationRef}
-          linking={linking} 
-          fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator color="#27AE60" /></View>}
-        >
+      <NavigationContainer
+        ref={navigationRef}
+        linking={linking}
+        fallback={<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator color="#27AE60" /></View>}
+      >
         <StatusBar style="light" />
         {user ? (
           <AppStack role={role || 'farmer'} />
