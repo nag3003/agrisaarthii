@@ -76,6 +76,14 @@ const styleFix = `
     display: flex;
     flex-direction: column;
   }
+  /* Fix React Native Web flex layout collapsing to 0px width in production */
+  #root > div {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 100% !important;
+    min-height: 100% !important;
+    flex: 1 !important;
+  }
 </style>
 `;
 html = html.replace('</head>', styleFix + '</head>');
